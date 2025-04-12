@@ -43,33 +43,33 @@ def upload_pdf():
         data = {
             'ocr': 'force',
             'model': 'document-parse',
-            'key_extraction': 'true'
+            #'key_extraction': 'true'
         }
         headers = {'Authorization': f'Bearer {API_KEY}'}
         response = requests.post(DIGITIZE_URL, headers=headers, files=files, data=data)
-        response2 = requests.post(EXTRACT_URL, headers=headers, files=files, data=data)
+        #response2 = requests.post(EXTRACT_URL, headers=headers, files=files, data=data)
 
     if response.status_code == 200:
         result = response.json()
-        result2 = response2.json()
+        #result2 = response2.json()
         html_output = result.get("content", {}).get("html", "")
         html_filename = os.path.splitext(file.filename)[0] + '.html'
         html_path = os.path.join(OUTPUT_HTML_DIR, html_filename)
 
-        key_values = result2.get("key_value", [])
-        json_filename = os.path.splitext(file.filename)[0] + '.json'
-        json_path = os.path.join(OUTPUT_JSON_DIR, json_filename)
+        #key_values = result2.get("key_value", [])
+        #json_filename = os.path.splitext(file.filename)[0] + '.json'
+        #json_path = os.path.join(OUTPUT_JSON_DIR, json_filename)
 
         with open(html_path, 'w', encoding='utf-8') as f:
             f.write(html_output)
-        with open(json_path, 'w', encoding='utf-8') as f:
-            json.dump(key_values, f, ensure_ascii=False, indent=2)
+        #with open(json_path, 'w', encoding='utf-8') as f:
+        #    json.dump(key_values, f, ensure_ascii=False, indent=2)
 
         return jsonify({
             "filename": file.filename,
             "html_file": html_filename,
-            "json_file": json_filename,
-            "key_value": key_values,
+            #"json_file": json_filename,
+            #"key_value": key_values,
             "status": "success"
         })
     else:
