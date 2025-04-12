@@ -5,13 +5,14 @@ import json
 from dotenv import load_dotenv
 from flask_cors import CORS
 from bs4 import BeautifulSoup
+from flask_cors import cross_origin
 
 load_dotenv()
 API_KEY = os.getenv("UPSTAGE_API_KEY")
 API_URL = "https://api.upstage.ai/v1/document-digitization"
 
 app = Flask(__name__)
-CORS(app, resources={r"/upload-pdf": {"origins": "*"}}, supports_credentials=True)
+CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True)
 
 INPUT_DIR = "input_pdfs"
 OUTPUT_DIR = "output_html"
@@ -70,7 +71,7 @@ def process_pdf(file_path):
             with open(os.path.join(HIGHLIGHT_DIR, "id_to_coord.json"), 'w', encoding='utf-8') as f:
                 json.dump(id_to_coord, f, ensure_ascii=False, indent=2)
 
-            # 📦 PDF 복사
+            # 포스트코드 PDF 복사
             target_pdf_path = os.path.join(STATIC_PDF_DIR, filename)
             if not os.path.exists(target_pdf_path):
                 with open(file_path, 'rb') as src, open(target_pdf_path, 'wb') as dst:
@@ -88,6 +89,7 @@ def process_pdf(file_path):
             }
 
 @app.route("/upload-pdf", methods=['POST'])
+@cross_origin()
 def upload_pdf():
     if 'file' not in request.files:
         return jsonify({"error": "No file part"}), 400
@@ -119,4 +121,6 @@ def serve_data(filename):
         return jsonify(json.load(f))
 
 if __name__ == '__main__':
-    app.run(debug=True, port=8000, host='0.0.0.0')
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "run":
+        app.run(debug=True, port=8000, host='0.0.0.0')

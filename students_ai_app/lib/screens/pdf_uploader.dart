@@ -51,7 +51,7 @@ class _PdfUploaderState extends State<PdfUploader> {
           final filename = jsonRes["html_file"] ?? "";
           final filenameWithoutExt = filename.replaceAll('.html', '');
 
-          // ✅ Perplexity 후처리 API 호출
+          //Perplexity 후처리 API 호출
           final perplexityUri =
           Uri.parse("http://10.10.5.171:8000/run-perplexity/$filenameWithoutExt");
           final perplexityRes = await http.get(perplexityUri);
