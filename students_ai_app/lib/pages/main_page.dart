@@ -71,7 +71,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
                   children: [
                     Text('Field',
                       style: TextStyle(
-                          fontSize: 25,
+                          fontSize: 20,
                           fontWeight: FontWeight.bold,
                           color: Colors.white
                       ),
@@ -88,7 +88,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
                     field == selectedField?
                     'assets/icons/VectorHamburger_purple.png'
                       :'assets/icons/VectorHamburger.png',
-                    height: 20,
+                    height: 16,
                     fit: BoxFit.cover,
                   ),
                   title: Text(
@@ -107,7 +107,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
                   children: [
                     Text('Institute',
                       style: TextStyle(
-                          fontSize: 25,
+                          fontSize: 20,
                           fontWeight: FontWeight.bold,
                           color: Colors.white
                       ),
@@ -124,7 +124,7 @@ class _ChatbotPageState extends State<ChatbotPage> {
                     inst == selectedInstitute?
                     'assets/icons/VectorHamburger_purple.png'
                         :'assets/icons/VectorHamburger.png',
-                    height: 20,
+                    height: 16,
                     fit: BoxFit.cover,
                   ),
                   title: Text(
