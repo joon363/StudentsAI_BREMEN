@@ -45,20 +45,20 @@
     "page": 1,
     "coordinates": [
       {
-        "x": 0.5023,
-        "y": 0.7306
+        "x": 0.5029,
+        "y": 0.7539
       },
       {
-        "x": 0.7214,
-        "y": 0.7306
+        "x": 0.8939,
+        "y": 0.7539
       },
       {
-        "x": 0.7214,
-        "y": 0.7479
+        "x": 0.8939,
+        "y": 0.8443
       },
       {
-        "x": 0.5023,
-        "y": 0.7479
+        "x": 0.5029,
+        "y": 0.8443
       }
     ]
   },
@@ -105,23 +105,23 @@
     ]
   },
   "ImageNet is constructed with the goal of having variable appearances, positions, poses, background clutter, and occlusions in images. The diversity of images is quantified by computing the average image of each synset and measuring the lossless JPG file size, which reflects the amount of information in an image. A more diverse set of images results in a smaller lossless JPG file size.": {
-    "page": 2,
+    "page": 3,
     "coordinates": [
       {
-        "x": 0.5016,
-        "y": 0.8711
+        "x": 0.079,
+        "y": 0.3691
       },
       {
-        "x": 0.8935,
-        "y": 0.8711
+        "x": 0.47,
+        "y": 0.3691
       },
       {
-        "x": 0.8935,
-        "y": 0.9029
+        "x": 0.47,
+        "y": 0.4525
       },
       {
-        "x": 0.5016,
-        "y": 0.9029
+        "x": 0.079,
+        "y": 0.4525
       }
     ]
   },
@@ -150,20 +150,20 @@
     "page": 4,
     "coordinates": [
       {
-        "x": 0.0787,
-        "y": 0.6241
+        "x": 0.0784,
+        "y": 0.7167
       },
       {
-        "x": 0.472,
-        "y": 0.6241
+        "x": 0.3009,
+        "y": 0.7167
       },
       {
-        "x": 0.472,
-        "y": 0.6999
+        "x": 0.3009,
+        "y": 0.7343
       },
       {
-        "x": 0.0787,
-        "y": 0.6999
+        "x": 0.0784,
+        "y": 0.7343
       }
     ]
   },
@@ -171,20 +171,20 @@
     "page": 5,
     "coordinates": [
       {
-        "x": 0.0795,
-        "y": 0.8641
+        "x": 0.5025,
+        "y": 0.0909
       },
       {
-        "x": 0.4726,
-        "y": 0.8641
+        "x": 0.7188,
+        "y": 0.0909
       },
       {
-        "x": 0.4726,
-        "y": 0.9005
+        "x": 0.7188,
+        "y": 0.1081
       },
       {
-        "x": 0.0795,
-        "y": 0.9005
+        "x": 0.5025,
+        "y": 0.1081
       }
     ]
   }
