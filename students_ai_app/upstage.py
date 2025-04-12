@@ -4,6 +4,8 @@ import requests
 import json
 from dotenv import load_dotenv
 from flask_cors import CORS
+from openai import OpenAI
+import base64
 
 load_dotenv()
 API_KEY = os.getenv("UPSTAGE_API_KEY")
@@ -92,6 +94,119 @@ def view_html(filename):
 @app.route('/data/<filename>.json')
 def get_json_data(filename):
     path = os.path.join(PREVIEW_DATA_DIR, f'{filename}.json')
+    if not os.path.exists(path):
+        return jsonify({"error": "file not found"}), 404
+    with open(path, 'r', encoding='utf-8') as f:
+        return jsonify(json.load(f))
+
+def is_pdf_file(filename):
+    return filename.lower().endswith('.pdf')
+
+def encode_pdf_to_base64(pdf_path):
+    with open(pdf_path, 'rb') as pdf_file:
+        pdf_bytes = pdf_file.read()
+        base64_data = base64.b64encode(pdf_bytes).decode('utf-8')
+        return base64_data
+
+def process_universal_extraction(file_path, schema):
+    filename = os.path.basename(file_path)
+    basename = os.path.splitext(filename)[0]
+    
+    # OpenAI 클라이언트 초기화
+    client = OpenAI(
+        api_key=API_KEY,
+        base_url="https://api.upstage.ai/v1/information-extraction"
+    )
+    
+    # PDF를 base64로 인코딩
+    base64_data = encode_pdf_to_base64(file_path)
+    
+    try:
+        # Information Extraction 요청
+        extraction_response = client.chat.completions.create(
+            model="information-extract",
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:application/pdf;base64,{base64_data}"
+                            }
+                        }
+                    ]
+                }
+            ],
+            response_format={
+                "type": "json_schema",
+                "json_schema": schema
+            }
+        )
+        
+        # ChatCompletion 객체에서 필요한 데이터 추출
+        response_data = {
+            "choices": [
+                {
+                    "message": {
+                        "content": choice.message.content,
+                        "role": choice.message.role
+                    }
+                }
+                for choice in extraction_response.choices
+            ]
+        }
+        
+        # 결과 저장
+        output_path = os.path.join(PREVIEW_DATA_DIR, f'{basename}_universal.json')
+        with open(output_path, 'w', encoding='utf-8') as json_file:
+            json.dump(response_data, json_file, ensure_ascii=False, indent=2)
+            
+        return {
+            "filename": filename,
+            "output_file": f'{basename}_universal.json',
+            "status": "success",
+            "result": response_data
+        }
+        
+    except Exception as e:
+        return {
+            "filename": filename,
+            "error": str(e),
+            "status": "failed"
+        }
+
+@app.route('/universal-extraction', methods=['POST'])
+def universal_extraction():
+    if 'file' not in request.files:
+        return jsonify({"error": "파일이 없습니다"}), 400
+        
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "선택된 파일이 없습니다"}), 400
+    
+    if not is_pdf_file(file.filename):
+        return jsonify({"error": "PDF 파일만 업로드 가능합니다"}), 400
+    
+    # 스키마 검증 추가
+    if 'schema' not in request.form:
+        return jsonify({"error": "스키마가 필요합니다"}), 400
+        
+    try:
+        schema = json.loads(request.form['schema'])
+    except json.JSONDecodeError:
+        return jsonify({"error": "잘못된 스키마 형식입니다"}), 400
+    
+    save_path = os.path.join(INPUT_DIR, file.filename)
+    file.save(save_path)
+    
+    result = process_universal_extraction(save_path, schema)  # schema 파라미터 추가
+    print(result)
+    return jsonify(result)
+
+@app.route('/universal-data/<filename>')
+def get_universal_data(filename):
+    path = os.path.join(PREVIEW_DATA_DIR, filename)
     if not os.path.exists(path):
         return jsonify({"error": "file not found"}), 404
     with open(path, 'r', encoding='utf-8') as f:
