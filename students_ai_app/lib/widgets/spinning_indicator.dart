@@ -7,18 +7,18 @@ class SpinningImage extends StatefulWidget {
   final Duration duration;
 
   const SpinningImage({
-    Key? key,
+    super.key,
     required this.imagePath,
     this.size = 40.0,
     this.duration = const Duration(seconds: 1),
-  }) : super(key: key);
+  });
 
   @override
-  _SpinningImageState createState() => _SpinningImageState();
+  State<SpinningImage> createState() => _SpinningImageState();
 }
 
 class _SpinningImageState extends State<SpinningImage>
-    with SingleTickerProviderStateMixin {
+  with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
 
   @override

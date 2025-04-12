@@ -37,56 +37,6 @@ const double defaultBorderRadius = 12.0;
 const Duration defaultDuration = Duration(milliseconds: 300);
 const double defaultElevation = 6.0;
 
-class PText extends Text {
-  PText(
-    super.data,
-    PFontStyle style,
-    Color color,
-    FontWeight weight,
-    {
-      super.key,
-      TextDecoration decoration = TextDecoration.none
-    }) : super(
-      style: PTextStyle(
-        color,
-        style,
-        weight,
-        decoration: decoration,
-      )
-    );
-}
-
-class PTextStyle extends TextStyle {
-  PTextStyle(
-    Color color,
-    PFontStyle style,
-    FontWeight weight,
-    {TextDecoration decoration = TextDecoration.none}
-  ) : super(
-      fontFamily: "KdamThmorPro",
-      color: color,
-      fontSize: style.size,
-      fontWeight: weight,
-      decoration: decoration
-    );
-}
-
 const FontWeight boldKdam = FontWeight.w900;
 const FontWeight semiboldKdam = FontWeight.w600;
 const FontWeight regularKdam = FontWeight.w300;
-
-class PFontStyle {
-  final double size;
-
-  // private 생성자
-  const PFontStyle._(this.size);
-  static const PFontStyle display = PFontStyle._(32.0);
-  static const PFontStyle title1 = PFontStyle._(28.0);
-  static const PFontStyle title2 = PFontStyle._(24.0);
-  static const PFontStyle headline1 = PFontStyle._(20.0);
-  static const PFontStyle headline2 = PFontStyle._(18.0);
-  static const PFontStyle body1 = PFontStyle._(16.0);
-  static const PFontStyle body2 = PFontStyle._(15.0);
-  static const PFontStyle label = PFontStyle._(14.0);
-  static const PFontStyle caption1 = PFontStyle._(12.0);
-}

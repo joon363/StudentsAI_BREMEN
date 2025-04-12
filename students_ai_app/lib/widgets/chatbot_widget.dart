@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:students_ai_app/widgets/prompt_help.dart';
+import 'package:students_ai_app/themes.dart';
 import 'package:students_ai_app/widgets/spinning_indicator.dart';
 
 class ChatbotWidget extends StatefulWidget {
@@ -19,6 +19,7 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
   final TextEditingController _controller = TextEditingController();
   final List<ChatMessage> _messages = []; // {'role': 'user' | 'bot', 'text': '...'}
   bool _isLoading = false;
+  static const double chatHorPadding = 150.0;
 
   void _sendMessage() async {
     final userText = _controller.text.trim();
@@ -42,21 +43,20 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
   Widget _buildMessage(ChatMessage message) {
     final isUser = message.isUser;
     final alignment = isUser ? Alignment.centerRight : Alignment.centerLeft;
-    final color = isUser ? Colors.blueAccent : Colors.grey.shade300;
     final textColor = isUser ? Colors.black : Colors.black87;
 
     return Align(
       alignment: alignment,
       child: message.isLoading?
-      Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+      Container(
+        margin: const EdgeInsets.symmetric(vertical: 4, horizontal: chatHorPadding),
         child: SpinningImage(
           imagePath: 'assets/icons/loading.png',
         ),
       ):
       Container(
         padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-        margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
+        margin: const EdgeInsets.symmetric(vertical: 4, horizontal: chatHorPadding),
         decoration: BoxDecoration(
           color: Colors.white,
           border: Border.all(color: Colors.grey.shade400),
@@ -71,7 +71,10 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
         ),
         child: Text(
           message.text ?? '',
-          style: TextStyle(color: textColor),
+          style: TextStyle(
+              fontSize: 16,
+              color: textColor
+          ),
         ),
       ),
     );
@@ -99,7 +102,7 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
         _messages.isEmpty? HelpPrompt():
         Expanded(
           child: ListView.builder(
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 30),
+            padding: const EdgeInsets.symmetric(vertical: 12),
             itemCount: _messages.length,
             itemBuilder: (context, index) {
               return _buildMessage(_messages[index]);
@@ -108,48 +111,68 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
         ),
 
         Padding(
-          padding: const EdgeInsets.only(left:130, right:130, bottom:80, top:10),
-          child: Row(
-            children: [
-              Expanded(
-                child: Container(
-                  height: 130,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    border: Border.all(color: Colors.grey.shade400),
-                    borderRadius: BorderRadius.circular(30),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.08),
-                        blurRadius: 8,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
+          padding: const EdgeInsets.only(left:chatHorPadding, right:chatHorPadding, bottom:80, top:10),
+          child: Expanded(
+            child: Container(
+              height: 130,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                border: Border.all(color: Colors.grey.shade400),
+                borderRadius: BorderRadius.circular(30),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.08),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
                   ),
-                  child: TextField(
-                    controller: _controller,
-                    onSubmitted: (_) => _sendMessage(),
-                    decoration: const InputDecoration(
-                      hintText: '"What areas should I strengthen or expand in my paper?"',
-                      hintStyle: TextStyle(color: Colors.grey),
-                      border: InputBorder.none,         // 밑줄 제거!
-                      focusedBorder: InputBorder.none,  // 포커스됐을 때도 밑줄 제거
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-                    ),
-                  ),
+                ],
+              ),
+              child: TextField(
+                controller: _controller,
+                onSubmitted: (_) => _sendMessage(),
+                decoration: const InputDecoration(
+                  hintText: '"What areas should I strengthen or expand in my paper?"',
+                  hintStyle: TextStyle(color: Colors.grey),
+                  border: InputBorder.none,         // 밑줄 제거!
+                  focusedBorder: InputBorder.none,  // 포커스됐을 때도 밑줄 제거
+                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 16),
                 ),
               ),
-              const SizedBox(width: 8),
-              IconButton(
-                icon: const Icon(Icons.send),
-                color: Colors.blue,
-                onPressed: _sendMessage,
-              )
-            ],
+            ),
           ),
         )
       ],
+    );
+  }
+}
+class HelpPrompt extends StatelessWidget {
+  const HelpPrompt({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 12.0),
+        child: Column(
+          children: [
+            Text(
+              'How can I help you?',
+              style: TextStyle(
+                fontSize: 50,
+                fontWeight: FontWeight.w500,
+                color: primaryColorDark,
+              ),
+            ),
+            Text(
+              'Upload your PDF (or other format)',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w500,
+                color: primaryColorDark,
+              ),
+            ),
+          ],
+        )
     );
   }
 }

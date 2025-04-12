@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:students_ai_app/pages/main_page.dart';
+import 'package:students_ai_app/pages/chatbot_page.dart';
 import 'package:students_ai_app/pages/pdf_view_page.dart';
 import 'package:students_ai_app/themes.dart';
 
@@ -11,9 +11,8 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Upstage Paper Assistant',
       theme: AppTheme.lightTheme(context),
-      //home: ChatbotPage(),
-      home: PdfAnnotationViewer()
-      ,
+      home: ChatbotPage(),
+      //home: PdfAnnotationViewer(),
     );
   }
 }
