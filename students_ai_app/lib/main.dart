@@ -92,7 +92,7 @@ class _PdfUploaderState extends State<PdfUploader> {
               "type": "array",
               "items": {"type": "string"},
               "description":
-                  "Main sentences from each section, providing specific details rather than summaries"
+                  "Main sentences from each section, providing specific details rather than summaries, and also check if all components of the paper have been covered"
             },
             "figures": {
               "type": "array",
