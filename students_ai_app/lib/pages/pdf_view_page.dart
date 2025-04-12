@@ -8,7 +8,7 @@ void main() {
 
 class PdfAnnotationViewer extends StatefulWidget
 {
-  const PdfAnnotationViewer({Key? key}) : super(key: key);
+  const PdfAnnotationViewer({super.key});
 
   @override
   State<PdfAnnotationViewer> createState() => _PdfAnnotationViewerState();
