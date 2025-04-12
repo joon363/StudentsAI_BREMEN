@@ -39,6 +39,7 @@ dependencies:
   pdfrx: ^1.1.21
 
   http_parser: any
+  archive: ^4.0.5
 dev_dependencies:
   flutter_test:
     sdk: flutter

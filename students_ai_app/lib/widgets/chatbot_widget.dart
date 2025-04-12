@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
 import 'dart:convert';
 import 'package:http_parser/http_parser.dart';
+import 'dart:typed_data';
 
 class ChatbotWidget extends StatefulWidget {
   const ChatbotWidget({super.key});
@@ -16,12 +17,14 @@ class ChatMessage {
   final String text;
   final bool isUser;
   final bool isLoading;
-  final List<Map<String, String>> files;
+  final String loadingMessage;
+  final List<String> files;
 
   ChatMessage({
     required this.text,
     this.isUser = false,
     this.isLoading = false,
+    this.loadingMessage = "",
     this.files = const[],
   });
 }
@@ -30,7 +33,9 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
   final List<ChatMessage> _messages = []; // {'role': 'user' | 'bot', 'text': '...'}
   bool _isLoading = false;
   static const double chatHorPadding = 150.0;
-  List<Map<String, String>> uploadedFiles = [];
+  List<String> uploadedFiles = [];
+  Map<String, dynamic>? extractionResult;
+  Map<String, Uint8List?> uploadedPdfFiles = {};
 
   Future<void> pickAndUploadFiles() async {
     final picked = await FilePicker.platform.pickFiles(
@@ -47,79 +52,190 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
 
     for (var file in picked.files) {
       setState(() {
-          uploadedFiles.add({
-            "original": file.name,
-          });
+          uploadedPdfFiles[file.name] = file.bytes;
+          uploadedFiles.add(file.name);
         });
-      //if (file.bytes == null) continue;
-      if (true) continue;
-
-      final uri = Uri.parse("http://10.10.5.171:8000/upload-pdf");
-      final request = http.MultipartRequest('POST', uri);
-      request.files.add(
-        http.MultipartFile.fromBytes(
-          'file',
-          file.bytes!,
-          filename: file.name,
-          contentType: MediaType('application', 'pdf'),
-        ),
-      );
-
-      try {
-        final response = await request.send();
-        final responseBody = await response.stream.bytesToString();
-
-        if (response.statusCode == 200) {
-          final jsonRes = json.decode(responseBody);
-          final filename = jsonRes["html_file"] ?? "";
-          final filenameWithoutExt = filename.replaceAll('.html', '');
-
-          // ✅ 업로드 성공 후 perplexity 후처리 API 호출
-          final perplexityUri = Uri.parse("http://10.10.5.171:8000/run-perplexity/$filenameWithoutExt");
-          final perplexityRes = await http.get(perplexityUri);
-
-          if (perplexityRes.statusCode == 200) {
-            print("✅ Perplexity 실행 성공");
-          } else {
-            print("❌ Perplexity 실행 실패: ${perplexityRes.body}");
-          }
-
-          // 목록에 추가
-          setState(() {
-              uploadedFiles.add({
-                "original": file.name,
-                "html": filename,
-              });
-            });
-
-          print("✅ HTML 변환 성공: $filename");
-        } else {
-          print("❌ 업로드 실패: $responseBody");
-        }
-      } catch (e) {
-        print("❌ 예외 발생: $e");
-      }
     }
   }
   void _sendMessage() async {
     final userText = _controller.text.trim();
+    final copiedFiles = uploadedFiles.map((file) => file).toList();
     if (userText.isEmpty) return;
 
     setState(() {
-        final copiedFiles = uploadedFiles.map((file) => Map<String, String>.from(file)).toList();
         _messages.add(ChatMessage(text: userText, isUser: true, files: copiedFiles));
-        _messages.add(ChatMessage(text: '...', isLoading: true));
+        _messages.add(ChatMessage(text: '...', isLoading: true, loadingMessage: "Searching for reference papers..."));
         _controller.clear();
         uploadedFiles.clear();
         _isLoading = true;
-      });
+      }
+    );
 
     // 더미 응답 시뮬레이션
-    await Future.delayed(const Duration(seconds: 3));
+    final result = await fetchRecommendedPapers(userText);
+
     setState(() {
         _messages.removeWhere((m) => m.isLoading); // 로딩 메시지 제거
-        _messages.add(ChatMessage(text: 'This is a dummy response for: "$userText"'));
-      });
+        _messages.add(ChatMessage(
+            text: 'We selected ${result.length} Papers to compare with.',
+            files: result)
+        );
+      }
+    );
+    await Future.delayed(Duration(seconds: 2));
+
+    setState(() {
+        _messages.add(ChatMessage(text: '...', isLoading: true, loadingMessage: "Parsing Uploaded paper..."));
+        _controller.clear();
+        uploadedFiles.clear();
+        _isLoading = true;
+      }
+    );
+
+    // 더미 응답 시뮬레이션
+    final result2 = await executeInformationExtraction(copiedFiles[0]);
+
+    setState(() {
+        _messages.removeWhere((m) => m.isLoading); // 로딩 메시지 제거
+        _messages.add(ChatMessage(
+            text: 'Extracted Information from Documents.')
+        );
+      }
+    );
+  }
+
+  Future<List<String>> fetchRecommendedPapers(String prompt) async {
+    final url = Uri.parse('http://localhost:5000/recommend');
+
+    try {
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'prompt': prompt}),
+      );
+
+      if (response.statusCode == 200) {
+        final responseJson = jsonDecode(response.body);
+        final List<dynamic> fileNames = responseJson['files'];
+        return fileNames.cast<String>();
+      } else {
+        print("에러 발생: ${response.statusCode} ${response.body}");
+        return [];
+      }
+    } catch (e) {
+      print('요청 중 오류 발생: $e');
+      return [];
+    }
+  }
+
+  Future<void> executeInformationExtraction(String originalFilename) async {
+    try {
+      final pdfBytes = uploadedPdfFiles[originalFilename];
+      if (pdfBytes == null) {
+        throw Exception("PDF 파일을 찾을 수 없습니다");
+      }
+
+      final schema = {
+        "name": "academic_paper_analysis_schema",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "subsections": {
+              "type": "array",
+              "items": {"type": "string"},
+              "description":
+              "Main sentences from each section, providing specific details rather than summaries, and also check if all components of the paper have been covered"
+            },
+            "figures": {
+              "type": "array",
+              "items": {"type": "string"},
+              "description":
+              "The descriptions of the figures included in the paper"
+            },
+            "equations": {
+              "type": "array",
+              "items": {"type": "string"},
+              "description":
+              "The descriptions of the equations included in the paper"
+            },
+            "methods": {
+              "type": "array",
+              "items": {"type": "string"},
+              "description":
+              "The newly proposed methods or techniques in the paper"
+            },
+            "metrics": {
+              "type": "array",
+              "items": {"type": "string"},
+              "description":
+              "The comparison schemes and evaluation metrics used in the paper"
+            },
+            "words": {
+              "type": "array",
+              "items": {"type": "string"},
+              "description": "The non-academic expressions found in the paper"
+            }
+          },
+          "required": [
+            "subsections",
+            "figures",
+            "equations",
+            "methods",
+            "metrics",
+            "words"
+          ]
+        }
+      };
+
+      final uri = Uri.parse("http://localhost:5000/universal-extraction");
+      var request = http.MultipartRequest('POST', uri);
+
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'file',
+          pdfBytes,
+          filename: originalFilename,
+          contentType: MediaType('application', 'pdf'),
+        ),
+      );
+
+      request.fields['schema'] = json.encode(schema);
+
+      var response = await request.send();
+      var responseBody = await response.stream.bytesToString();
+      //print("서버 응답: $responseBody"); // 디버깅용 로그
+
+      if (response.statusCode == 200) {
+        var jsonResponse = json.decode(responseBody);
+        print("서버 응답: $jsonResponse"); // 디버깅용 로그
+
+        if (jsonResponse['result'] != null &&
+          jsonResponse['result']['result']['choices'] != null &&
+          jsonResponse['result']['result']['choices'].isNotEmpty) {
+          var contentStr =
+            jsonResponse['result']['result']['choices'][0]['message']['content'];
+          var content = json.decode(contentStr);
+
+          setState(() {
+              extractionResult = content;
+            });
+          print("✅ Universal Extraction 성공");
+        } else {
+          print(jsonResponse['result']['result']['choices']);
+          throw Exception("잘못된 응답 형식");
+        }
+      } else {
+        print("❌ Universal Extraction 오류: $responseBody");
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("처리 중 오류가 발생했습니다")),
+        );
+      }
+    } catch (e) {
+      print("❌ 오류 발생: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("오류가 발생했습니다: $e")),
+      );
+    }
   }
 
   Widget _buildMessage(ChatMessage message) {
@@ -133,9 +249,21 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
       child: message.isLoading ?
         Container(
           margin: const EdgeInsets.symmetric(vertical: 4, horizontal: chatHorPadding),
-          child: SpinningImage(
-            imagePath: 'assets/icons/loading.png',
-          ),
+          child: Row(
+            spacing: 10,
+            children: [
+              SpinningImage(
+                imagePath: 'assets/icons/loading.png',
+              ),
+              Text(
+                message.loadingMessage,
+                style: TextStyle(
+                  fontSize: 16,
+                  color: textGrayColor
+                ),
+              )
+            ],
+          )
         ) :
         Column(
           mainAxisAlignment: MainAxisAlignment.start,
@@ -167,19 +295,19 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
             message.files.isNotEmpty ?
               Container(
                 margin: const EdgeInsets.symmetric(vertical: 4, horizontal: chatHorPadding),
-                width: 500,
-                height: 80,
+                width: 800,
+                height: isUser ? 80 : 300,
                 child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  reverse: true,
+                  scrollDirection: isUser ? Axis.horizontal : Axis.vertical,
+                  reverse: isUser,
                   itemCount: message.files.length,
                   itemBuilder: (context, index) {
                     final item = message.files[index];
                     return Container(
                       //width: 100,
                       padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-                      margin: const EdgeInsets.only(left: 15),
-                      alignment: Alignment.center,
+                      margin: const EdgeInsets.only(left: 15, bottom: 15),
+                      alignment: isUser ? Alignment.center : Alignment.centerLeft,
                       decoration: BoxDecoration(
                         color: primaryColor,
                         border: Border.all(color: Colors.grey.shade400),
@@ -197,7 +325,7 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
                           fontSize: 16,
                           color: Colors.white,
                         ),
-                        item["original"] ?? "이름 없음"),
+                        item ?? "이름 없음"),
                     );
                   },
                 ),
@@ -294,7 +422,7 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
                       ),
                       const SizedBox(height: 20),
                       SizedBox(
-                        width: 300,
+                        width: 800,
                         child: ListView.builder(
                           scrollDirection: Axis.horizontal,
                           itemCount: uploadedFiles.length,
@@ -311,7 +439,7 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
                               //width: 100,
                               child: Row(
                                 children: [
-                                  Text(item["original"] ?? "이름 없음"),
+                                  Text(item ?? "이름 없음"),
                                 ],
                               )
                             );
