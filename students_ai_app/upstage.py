@@ -1,27 +1,51 @@
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, send_from_directory
 import os
 import requests
 import json
 from dotenv import load_dotenv
 from flask_cors import CORS
+from bs4 import BeautifulSoup
 
 load_dotenv()
 API_KEY = os.getenv("UPSTAGE_API_KEY")
 API_URL = "https://api.upstage.ai/v1/document-digitization"
 
-app = Flask(__name__, template_folder="templates")
+app = Flask(__name__)
 CORS(app, resources={r"/upload-pdf": {"origins": "*"}}, supports_credentials=True)
 
 INPUT_DIR = "input_pdfs"
 OUTPUT_DIR = "output_html"
 PREVIEW_DATA_DIR = "output_data"
+STATIC_PDF_DIR = os.path.join("static", "pdfs")
+HIGHLIGHT_DIR = "data"
+
 os.makedirs(INPUT_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 os.makedirs(PREVIEW_DATA_DIR, exist_ok=True)
+os.makedirs(STATIC_PDF_DIR, exist_ok=True)
+os.makedirs(HIGHLIGHT_DIR, exist_ok=True)
+
+def extract_text_and_id_maps(elements):
+    text_to_id = {}
+    id_to_coord = {}
+    for el in elements:
+        html = el.get("content", {}).get("html", "")
+        if not html:
+            continue
+        soup = BeautifulSoup(html, "html.parser")
+        text = soup.get_text(separator=' ', strip=True)
+        if not text:
+            continue
+        eid = el.get("id")
+        text_to_id[text] = eid
+        id_to_coord[str(eid)] = {
+            "page": el.get("page"),
+            "coordinates": el.get("coordinates", [])
+        }
+    return text_to_id, id_to_coord
 
 def process_pdf(file_path):
     filename = os.path.basename(file_path)
-    basename = os.path.splitext(filename)[0]
     with open(file_path, 'rb') as f:
         files = {
             'document': (filename, f, 'application/pdf')
@@ -35,30 +59,25 @@ def process_pdf(file_path):
 
         response = requests.post(API_URL, headers=headers, files=files, data=data)
 
-        print(f"📬 응답 코드: {response.status_code}")
-        print(f"📬 응답 내용: {response.text}")
-
         if response.status_code == 200:
             result = response.json()
-            html_output = result.get("content", {}).get("html", "") or str(result)
-            html_filename = basename + '.html'
-            output_path = os.path.join(OUTPUT_DIR, html_filename)
 
-            with open(output_path, 'w', encoding='utf-8') as html_file:
-                html_file.write(html_output)
+            text_to_id, id_to_coord = extract_text_and_id_maps(result.get("elements", []))
 
-            # ✅ preview 파일을 고유 이름으로 저장
-            preview_data = {
-                "elements": result.get("elements", []),
-                "tables": result.get("tables", [])
-            }
-            preview_path = os.path.join(PREVIEW_DATA_DIR, f'{basename}.json')
-            with open(preview_path, 'w', encoding='utf-8') as json_file:
-                json.dump(preview_data, json_file, ensure_ascii=False, indent=2)
+            with open(os.path.join(HIGHLIGHT_DIR, "text_to_id.json"), 'w', encoding='utf-8') as f:
+                json.dump(text_to_id, f, ensure_ascii=False, indent=2)
+
+            with open(os.path.join(HIGHLIGHT_DIR, "id_to_coord.json"), 'w', encoding='utf-8') as f:
+                json.dump(id_to_coord, f, ensure_ascii=False, indent=2)
+
+            # 📦 PDF 복사
+            target_pdf_path = os.path.join(STATIC_PDF_DIR, filename)
+            if not os.path.exists(target_pdf_path):
+                with open(file_path, 'rb') as src, open(target_pdf_path, 'wb') as dst:
+                    dst.write(src.read())
 
             return {
                 "filename": filename,
-                "html_file": html_filename,
                 "status": "success"
             }
         else:
@@ -68,7 +87,7 @@ def process_pdf(file_path):
                 "status": "failed"
             }
 
-@app.route('/upload-pdf', methods=['POST'])
+@app.route("/upload-pdf", methods=['POST'])
 def upload_pdf():
     if 'file' not in request.files:
         return jsonify({"error": "No file part"}), 400
@@ -83,18 +102,20 @@ def upload_pdf():
     result = process_pdf(save_path)
     return jsonify(result)
 
-# ✅ HTML Viewer 페이지
-@app.route('/view-html/<filename>')
+@app.route("/view-html/<filename>")
 def view_html(filename):
-    return render_template('viewer.html')  # templates/viewer.html
+    return render_template("viewer.html", filename=filename)
 
-# ✅ JSON 데이터 반환
-@app.route('/data/<filename>.json')
-def get_json_data(filename):
-    path = os.path.join(PREVIEW_DATA_DIR, f'{filename}.json')
+@app.route("/pdfs/<path:filename>")
+def serve_pdf(filename):
+    return send_from_directory(STATIC_PDF_DIR, filename)
+
+@app.route("/data/<filename>.json")
+def serve_data(filename):
+    path = os.path.join(PREVIEW_DATA_DIR, f"{filename}.json")
     if not os.path.exists(path):
-        return jsonify({"error": "file not found"}), 404
-    with open(path, 'r', encoding='utf-8') as f:
+        return jsonify({"elements": {}, "tables": []})
+    with open(path, "r", encoding="utf-8") as f:
         return jsonify(json.load(f))
 
 if __name__ == '__main__':
