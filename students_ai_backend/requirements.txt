@@ -8,3 +8,6 @@ openai
 cryptography
 flask_cors
 dotenv
+pandas
+bs4
+openpyxl

@@ -1,17 +1,16 @@
 from flask import Flask, request, render_template, jsonify, send_file
 import os
 import shutil
-#from sentence_transformers import SentenceTransformer
 from io import BytesIO
-import zipfile
 from extractor import find_top_papers
-from information_extractor import process_pdf
 import requests
 import json
 from dotenv import load_dotenv
 from flask_cors import CORS
 from openai import OpenAI
 import base64
+import json
+from bs4 import BeautifulSoup
 
 app = Flask(__name__)
 
@@ -33,6 +32,8 @@ API_KEY = os.getenv("UPSTAGE_API_KEY")
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY")
 
 API_URL = "https://api.upstage.ai/v1/document-digitization" 
+PERP_API_URL = "https://api.perplexity.ai/chat/completions"
+
 app = Flask(__name__, template_folder="templates")
 CORS(app)
 #CORS(app, resources={r"/upload-pdf": {"origins": "*"}}, supports_credentials=True)
@@ -40,9 +41,21 @@ CORS(app)
 INPUT_DIR = "input_pdfs"
 OUTPUT_DIR = "output_html"
 PREVIEW_DATA_DIR = "output_data"
+STATIC_PDF_DIR = os.path.join("static", "pdfs")
+HIGHLIGHT_DIR = "data"
 os.makedirs(INPUT_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 os.makedirs(PREVIEW_DATA_DIR, exist_ok=True)
+os.makedirs(STATIC_PDF_DIR, exist_ok=True)
+os.makedirs(HIGHLIGHT_DIR, exist_ok=True)
+
+
+# 데이터 파일 경로 설정
+DATA_DIR = "data"
+TEXT_TO_ID_PATH = os.path.join(DATA_DIR, "text_to_id.json")         # 원문 문장 → ID
+ID_TO_COORD_PATH = os.path.join(DATA_DIR, "id_to_coord.json")       # ID → 좌표 정보
+SUMMARY_LIST_PATH = os.path.join(DATA_DIR, "summary_list.json")     # 요약 문장 리스트
+SUMMARY_COORD_PATH = os.path.join(DATA_DIR, "summary_to_coords.json")  # 결과 저장 위치
 
 
 @app.route('/recommend', methods=['POST'])
@@ -76,7 +89,8 @@ def recommend():
 
     return jsonify({"files": result_filenames}), 200
 
-@app.route('/upload-pdf', methods=['POST'])
+# PDF 업로드 라우트 (POST 요청)
+@app.route("/upload-pdf", methods=['POST'])
 def upload_pdf():
     if 'file' not in request.files:
         return jsonify({"error": "No file part"}), 400
@@ -184,6 +198,7 @@ def process_universal_extraction(file_path, schema):
 
 @app.route('/universal-extraction', methods=['POST'])
 def universal_extraction():
+    print("Universal Extraction Call")
     if 'file' not in request.files:
         return jsonify({"error": "파일이 없습니다"}), 400
         
@@ -344,10 +359,12 @@ def universal_extraction():
                         "original_data": main_paper_data,
                         "analysis": analysis_data
                     }
+                    with open(SUMMARY_LIST_PATH, "w", encoding="utf-8") as f:
+                        json.dump(combined_result, f, ensure_ascii=False, indent=2)
                     
                     # 결과에 추가
-                    print(combined_result)
                     print("✅ Perplexity API 호출 및 JSON 파싱 성공")
+                    return combined_result
                 except Exception as json_error:
                     print(f"❌ Perplexity 응답 JSON 파싱 실패: {str(json_error)}")
                     # 원본 응답 저장
@@ -359,10 +376,7 @@ def universal_extraction():
     except Exception as e:
         print(f"❌ Perplexity API 처리 중 오류 발생: {str(e)}")
         result['perplexity_error'] = str(e)
-    return jsonify({
-        "result": result,
-        "reference_results": reference_results
-    })
+    return combined_result
 
 @app.route('/universal-data/<filename>')
 def get_universal_data(filename):
@@ -372,6 +386,173 @@ def get_universal_data(filename):
     with open(path, 'r', encoding='utf-8') as f:
         return jsonify(json.load(f))
     
+
+
+# API 요청 헤더
+headers = {
+    "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
+    "Content-Type": "application/json"
+}
+
+# Perplexity API를 호출하여 요약 문장에 해당하는 원문 ID를 추정하고, 해당 ID의 좌표를 찾아 저장
+def run_perplexity():
+    
+    print("run_perplexity Call")
+    # 사전 정리된 JSON 파일들 로딩
+    with open(TEXT_TO_ID_PATH, "r", encoding="utf-8") as f:
+        text_to_id = json.load(f)
+    with open(ID_TO_COORD_PATH, "r", encoding="utf-8") as f:
+        id_to_coord = json.load(f)
+    with open(SUMMARY_LIST_PATH, "r", encoding="utf-8") as f:
+        summary_list = json.load(f)
+
+    # LLM 프롬프트 구성
+    prompt = f"""
+    다음은 원문 문장과 해당 문장의 ID입니다:
+    {text_to_id}
+
+    아래는 요약된 문장과 그 요약된 문장에서 비롯된 코멘트들의 리스트입니다.
+    이 코멘트나 요약된 문장이 위 원문 중 어떤 문장을 요약한 것인지 유추해서, 해당 원문의 ID를 찾아주세요.
+
+    출력은 다음과 같은 JSON 형식으로 해주세요:
+    **영어로 대답해 주세요.**
+
+    {{
+      "코멘트 1": ID,
+      "코멘트 2": ID,
+      ...
+    }}
+
+    코멘트들:
+    {summary_list}
+    """
+
+    # Perplexity API에 요청 전송
+    payload = {
+        "model": "sonar",  # 사용할 모델 이름
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.3
+    }
+
+    response = requests.post(PERP_API_URL, headers=headers, json=payload)
+
+    print("🔁 Status Code:", response.status_code)
+
+    try:
+        # 응답에서 JSON 형태 결과 텍스트만 추출
+        full_text = response.json()["choices"][0]["message"]["content"]
+        print("✅ Perplexity 응답:\n", full_text[:300], "...")
+
+        # 응답 텍스트에서 JSON 코드 블록만 추출
+        start = full_text.find("```json")
+        end = full_text.find("```", start + 7)
+
+        if start != -1 and end != -1:
+            json_str = full_text[start + 7:end].strip()
+        else:
+            raise ValueError("JSON 코드 블록을 찾을 수 없습니다.")
+
+        matched = json.loads(json_str)
+
+        # ID를 바탕으로 해당 문장의 좌표 및 페이지 정보 추출
+        summary_to_coords = {}
+        for sentence, id_val in matched.items():
+            id_str = str(id_val)
+            if id_str in id_to_coord:
+                summary_to_coords[sentence] = {
+                    "page": id_to_coord[id_str]["page"],
+                    "coordinates": id_to_coord[id_str]["coordinates"]
+                }
+
+        # 결과 저장
+        with open(SUMMARY_COORD_PATH, "w", encoding="utf-8") as f:
+            json.dump(summary_to_coords, f, ensure_ascii=False, indent=2)
+
+        print(f"✅ 저장 완료: {SUMMARY_COORD_PATH}")
+        return True, summary_to_coords
+
+    except Exception as e:
+        # 예외 발생 시 로깅 및 에러 메시지 반환
+        print("❌ JSON 파싱 실패:", e)
+        print("⚠️ 응답 내용:\n", response.text)
+        return False, {"error": str(e)}
+
+
+
+@app.route("/run-perplexity", methods=["GET"])
+def run():
+    print("run_perplexity API Call")
+    success, result = run_perplexity()
+    print(result)
+    return jsonify(result), (200 if success else 500)
+
+# elements 항목으로부터 문장과 ID 매핑, ID와 좌표 매핑을 추출
+def extract_text_and_id_maps(elements):
+    text_to_id = {}
+    id_to_coord = {}
+    for el in elements:
+        html = el.get("content", {}).get("html", "")
+        if not html:
+            continue
+        soup = BeautifulSoup(html, "html.parser")
+        text = soup.get_text(separator=' ', strip=True)
+        if not text:
+            continue
+        eid = el.get("id")
+        text_to_id[text] = eid
+        id_to_coord[str(eid)] = {
+            "page": el.get("page"),
+            "coordinates": el.get("coordinates", [])
+        }
+    return text_to_id, id_to_coord
+
+def process_pdf(file_path):
+    print("process_pdf Call")
+    filename = os.path.basename(file_path)
+    with open(file_path, 'rb') as f:
+        files = {
+            'document': (filename, f, 'application/pdf')
+        }
+        data = {
+            'ocr': 'force',
+            'base64_encoding': "['table']",
+            'model': 'document-parse'
+        }
+        headers = {'Authorization': f'Bearer {API_KEY}'}
+
+        response = requests.post(API_URL, headers=headers, files=files, data=data)
+
+        if response.status_code == 200:
+            result = response.json()
+
+            # 결과에서 필요한 매핑 정보 추출
+            text_to_id, id_to_coord = extract_text_and_id_maps(result.get("elements", []))
+
+            # JSON 파일로 저장
+            with open(os.path.join(HIGHLIGHT_DIR, "text_to_id.json"), 'w', encoding='utf-8') as f:
+                json.dump(text_to_id, f, ensure_ascii=False, indent=2)
+
+            with open(os.path.join(HIGHLIGHT_DIR, "id_to_coord.json"), 'w', encoding='utf-8') as f:
+                json.dump(id_to_coord, f, ensure_ascii=False, indent=2)
+
+            # 업로드된 PDF를 static 폴더로 복사
+            target_pdf_path = os.path.join(STATIC_PDF_DIR, filename)
+            if not os.path.exists(target_pdf_path):
+                with open(file_path, 'rb') as src, open(target_pdf_path, 'wb') as dst:
+                    dst.write(src.read())
+
+            return {
+                "filename": filename,
+                "status": "success"
+            }
+        else:
+            return {
+                "filename": filename,
+                "error": response.text,
+                "status": "failed"
+            }
+
+
 
 if __name__ == '__main__':
     app.run(debug=True)
