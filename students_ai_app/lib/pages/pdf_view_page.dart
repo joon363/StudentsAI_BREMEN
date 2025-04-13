@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:pdfrx/pdfrx.dart';
 import 'package:students_ai_app/themes.dart';
 
-void main() {
-  runApp(const MaterialApp(home: PdfAnnotationViewer()));
-}
+import 'dart:convert';
+import 'dart:io';
+
 
 class PdfAnnotationViewer extends StatefulWidget
 {
-  const PdfAnnotationViewer({super.key});
+  final Map<String, dynamic> finalResult;
+  const PdfAnnotationViewer({super.key, required this.finalResult});
 
   @override
   State<PdfAnnotationViewer> createState() => _PdfAnnotationViewerState();
@@ -17,8 +18,18 @@ class PdfAnnotationViewer extends StatefulWidget
 class _PdfAnnotationViewerState extends State<PdfAnnotationViewer>
 {
   late PdfViewerController _pdfController;
+  List<Annotation>? annotations;
 
-  final List<Annotation> annotations = [
+  Future<List<Annotation>> loadAnnotations() async {
+    final anno = <Annotation>[];
+    widget.finalResult?.forEach((content, data) {
+      anno.add(Annotation.fromJson(content, data));
+      print(data.toString());
+    });
+    anno.sort((a, b) => a.page.compareTo(b.page));
+    return anno;
+  }
+  final List<Annotation> Oldannotations = [
     Annotation(
       content: "Recommanded improvements",
       page: 1,
@@ -49,27 +60,34 @@ class _PdfAnnotationViewerState extends State<PdfAnnotationViewer>
   {
     super.initState();
     _pdfController = PdfViewerController();
+    loadAnnotations().then((loadedAnnotations) {
+      setState(() {
+        annotations = loadedAnnotations;
+      });
+    });
   }
 
   @override
   Widget build(BuildContext context) 
   {
     return Scaffold(
-      appBar: AppBar(title: const Text("PDF with Annotations")),
+      appBar: AppBar(scrolledUnderElevation: 0,
+          surfaceTintColor: Colors.transparent,
+          title: const Text("PDF with Annotations")),
       body: LayoutBuilder(
         builder: (context, constraints) {
           return Stack(
             children: [
               PdfViewer.asset(
-                '/pdfs/1.pdf',
+                '/pdfs/2.pdf',
                 controller: _pdfController,
                 params: PdfViewerParams(
                   panEnabled: false,
                   pageOverlaysBuilder: (context, pageRect, page) {
                     final pageNumber = page.pageNumber;
                     final pageAnnotations =
-                      annotations.where((a) => a.page == pageNumber);
-                    _bubbles = annotations.map((anno) {
+                      annotations!.where((a) => a.page == pageNumber);
+                    _bubbles = annotations!.map((anno) {
                         return BubbleInfo(
                           content: anno.content,
                           page: anno.page,
@@ -117,9 +135,10 @@ class _PdfAnnotationViewerState extends State<PdfAnnotationViewer>
                     Container(
                       alignment: Alignment.topRight,
                       margin: EdgeInsets.all(30),
-                      child: Column(
-                        spacing: 20,
-                        children: _bubbles.map((bubble) {
+                      child: SingleChildScrollView(
+                        child: Column(
+                          spacing: 20,
+                          children: _bubbles.map((bubble) {
                             return Material(
                               elevation: 0,
                               color: Colors.white, // 배경색은 Container에서 설정
@@ -127,8 +146,8 @@ class _PdfAnnotationViewerState extends State<PdfAnnotationViewer>
                               child: InkWell(
                                 onTap: () {
                                   _pdfController.goToPage(
-                                    pageNumber:
-                                    bubble.page); // 원하는 페이지로 이동
+                                      pageNumber:
+                                      bubble.page); // 원하는 페이지로 이동
                                 },
                                 borderRadius:
                                 BorderRadius.circular(10), // 터치 영역도 둥글게
@@ -159,7 +178,8 @@ class _PdfAnnotationViewerState extends State<PdfAnnotationViewer>
                               ),
                             );
                           }).toList(),
-                      ),
+                        ),
+                      )
                     )
                   ]
                 ),
@@ -183,6 +203,18 @@ class Annotation
     required this.page,
     required this.coordinates,
   });
+  factory Annotation.fromJson(String content, Map<String, dynamic> json) {
+    return Annotation(
+      content: content,
+      page: json['page'],
+      coordinates: (json['coordinates'] as List)
+          .map((coord) => Offset(
+        (coord['x'] as num).toDouble(),
+        (coord['y'] as num).toDouble(),
+      ))
+          .toList(),
+    );
+  }
 }
 
 class BubbleInfo
