@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Reconstructed PDF Viewer</title>
+    <style>
+        body {
+          margin: 0;
+          padding: 0;
+          background: #f0f0f0;
+          font-family: sans-serif;
+        }
+        .viewer {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          padding: 20px;
+        }
+        .page-container {
+          position: relative;
+          width: 800px;
+          height: 1120px;
+          margin-bottom: 20px;
+          background: white;
+          border: 1px solid #ccc;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        .text-block {
+          position: absolute;
+          border: none;
+          padding: 0;
+          overflow: hidden;
+          white-space: nowrap;
+          word-break: break-word;
+          color: black;
+          font-family: sans-serif;
+          background: transparent;
+          text-align: justify;
+          font-size: 11pt;
+          line-height: 1.2;
+        }
+        .table-img {
+          position: absolute;
+          border: none;
+        }
+        .pagination {
+          margin-top: 20px;
+        }
+        .pagination button {
+          margin: 0 10px;
+          padding: 6px 16px;
+          font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+<div class="viewer">
+    <div class="page-container" id="page"></div>
+    <div class="pagination">
+        <button onclick="prevPage()">⬅ 이전</button>
+        <span id="page-info">1</span>
+        <button onclick="nextPage()">다음 ➡</button>
+    </div>
+</div>
+
+<script>
+    let allElements = [];
+    let allTables = [];
+    let currentPage = 1;
+    const container = document.getElementById("page");
+    const pageInfo = document.getElementById("page-info");
+
+    function renderPage(pageNum) {
+      container.innerHTML = "";
+      const pw = 800;
+      const ph = 1120;
+
+      allElements.filter(el => el.page === pageNum).forEach(el => {
+        const div = document.createElement("div");
+        div.className = "text-block";
+        div.innerHTML = el.content?.html || el.content?.text || "";
+
+        const coords = el.coordinates || [];
+        if (coords.length >= 2) {
+          const x = coords[0].x * pw;
+          const y = coords[0].y * ph;
+          const w = (coords[1].x - coords[0].x) * pw;
+          const h = (coords[2].y - coords[1].y) * ph;
+
+          div.style.left = `${x}px`;
+          div.style.top = `${y}px`;
+          div.style.width = `${w}px`;
+          div.style.height = `${h}px`;
+
+          // 폰트 크기 고정 (11pt)
+          div.style.fontSize = `11pt`;
+        }
+
+        container.appendChild(div);
+      });
+
+      allTables.filter(tb => tb.page === pageNum).forEach(tb => {
+        const img = document.createElement("img");
+        img.className = "table-img";
+
+        const rawBase64 = tb.base64 || tb.image_base64 || "";
+        const imageSrc = rawBase64.startsWith("data:image")
+          ? rawBase64
+          : `data:image/png;base64,${rawBase64}`;
+
+        img.src = imageSrc;
+
+        const x = tb.x * pw;
+        const y = tb.y * ph;
+        const w = tb.w * pw;
+        const h = tb.h * ph;
+
+        img.style.left = `${x}px`;
+        img.style.top = `${y}px`;
+        img.style.width = `${w}px`;
+        img.style.height = `${h}px`;
+
+        container.appendChild(img);
+      });
+
+      pageInfo.textContent = pageNum;
+    }
+
+    function nextPage() {
+      const maxPage = Math.max(
+        ...allElements.map(el => el.page || 1),
+        ...allTables.map(tb => tb.page || 1)
+      );
+      if (currentPage < maxPage) {
+        currentPage++;
+        renderPage(currentPage);
+      }
+    }
+
+    function prevPage() {
+      if (currentPage > 1) {
+        currentPage--;
+        renderPage(currentPage);
+      }
+    }
+
+    async function fetchData() {
+      const path = window.location.pathname;
+      const filename = path.split("/").pop();
+      const res = await fetch(`/data/${filename}.json`);
+
+      if (!res.ok) {
+        container.innerText = "❌ 데이터를 불러올 수 없습니다.";
+        return;
+      }
+
+      const { elements, tables } = await res.json();
+      allElements = elements || [];
+      allTables = tables || [];
+
+      currentPage = 1;
+      renderPage(currentPage);
+    }
+
+    fetchData();
+</script>
+</body>
+</html>
