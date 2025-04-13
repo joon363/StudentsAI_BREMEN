@@ -1,9 +1,10 @@
 # 🧠 UpDocs: AGI-based Document Feedback Assistant
 
-Welcome to **UpDocs**, an AI-powered document assistant created by **Team Bremen** as part of the Upstage track at the AI Hackathon.
+Welcome to **UpDocs**, an AI-powered document assistant created by **Team Bremen** as part of the Upstage track at the STUDENTS@AI SEOUL Hackathon.
 
 ## 🚀 Overview
-UpDocs helps users — especially students, researchers, and new hires — improve their documents with minimal manual effort. By uploading a draft, users receive structured, insightful feedback based on high-quality references, all powered by Upstage APIs and AGI reasoning.
+UpDocs helps users — especially students, researchers, and new hires — improve their documents with minimal manual effort. 
+By uploading a draft, users receive structured, insightful feedback based on high-quality references, all powered by Upstage APIs and AGI reasoning.
 
 ---
 
@@ -43,8 +44,8 @@ Our MVP targets **IEEE-style academic papers**, because:
 ## 🛠 Architecture
 **User Flow**
 1. Upload paper (PDF)
-2. Upstage APIs: `ocr`, `parsing`, `info extraction`
-3. Match similar IEEE papers
+2. Upstage APIs: `ocr`, `parsing`, `info extraction`, `chat bot`
+3. Match similar papers that are accepted by target journal
 4. Compare and annotate suggestions
 5. Ask/Revise through Perplexity chatbot
 
@@ -68,11 +69,8 @@ We aim to:
 ---
 
 ## 👥 About Team Bremen
-A team of passionate students:
-- 3 from POSTECH (Undergraduate, Computer & Mechanical Eng)
-- 1 from SNU (Graduate, AI/ML)
-
-We’ve previously won hackathons and built several research/side projects.
+***We are Team Bremen*** that composed of three undergraduate students from POSTECH and one graduate student from Seoul National University.
+We have participated in and won various hackathons, while also working on individual and team-based projects.
 
 ---
 
