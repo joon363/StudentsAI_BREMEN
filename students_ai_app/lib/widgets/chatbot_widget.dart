@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:students_ai_app/themes.dart';
 import 'package:students_ai_app/widgets/spinning_indicator.dart';
+import 'package:students_ai_app/pages/pdf_view_page.dart';
 import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
 import 'dart:convert';
@@ -17,6 +18,7 @@ class ChatMessage {
   final String text;
   final bool isUser;
   final bool isLoading;
+  final bool isEnding;
   final String loadingMessage;
   final List<String> files;
 
@@ -24,6 +26,7 @@ class ChatMessage {
     required this.text,
     this.isUser = false,
     this.isLoading = false,
+    this.isEnding = false,
     this.loadingMessage = "",
     this.files = const[],
   });
@@ -34,8 +37,13 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
   bool _isLoading = false;
   static const double chatHorPadding = 150.0;
   List<String> uploadedFiles = [];
+  List<Map<String, String>> uploadedHtmlFiles = [];
   Map<String, dynamic>? extractionResult;
   Map<String, Uint8List?> uploadedPdfFiles = {};
+  final ScrollController _scrollController = ScrollController();
+
+  bool isAllEnd = false;
+  Map<String, dynamic>? finalResult;
 
   Future<void> pickAndUploadFiles() async {
     final picked = await FilePicker.platform.pickFiles(
@@ -70,38 +78,97 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
         _isLoading = true;
       }
     );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(Duration(milliseconds: 50), () {
+        _scrollToBottom();
+      });
+    });
 
     // 더미 응답 시뮬레이션
-    final result = await fetchRecommendedPapers(userText);
+    try{
+      final result = await fetchRecommendedPapers(userText);
 
-    setState(() {
-        _messages.removeWhere((m) => m.isLoading); // 로딩 메시지 제거
-        _messages.add(ChatMessage(
-            text: 'We selected ${result.length} Papers to compare with.',
-            files: result)
-        );
-      }
-    );
-    await Future.delayed(Duration(seconds: 2));
+      setState(() {
+          _messages.removeWhere((m) => m.isLoading); // 로딩 메시지 제거
+          _messages.add(ChatMessage(
+              text: '☑️  Selected ${result.length} Papers to compare with.',
+              files: result)
+          );
+        }
+      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Future.delayed(Duration(milliseconds: 50), () {
+          _scrollToBottom();
+        });
+      });
+      await Future.delayed(Duration(seconds: 2));
 
-    setState(() {
-        _messages.add(ChatMessage(text: '...', isLoading: true, loadingMessage: "Parsing Uploaded paper..."));
-        _controller.clear();
-        uploadedFiles.clear();
-        _isLoading = true;
-      }
-    );
+      setState(() {
+          _messages.add(ChatMessage(text: '...', isLoading: true, loadingMessage: "Analyzing Selected papers..."));
+          _controller.clear();
+          uploadedFiles.clear();
+          _isLoading = true;
+        }
+      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Future.delayed(Duration(milliseconds: 50), () {
+          _scrollToBottom();
+        });
+      });
+      // 더미 응답 시뮬레이션
+      final result2 = await executeInformationExtraction(copiedFiles[0]);
 
-    // 더미 응답 시뮬레이션
-    final result2 = await executeInformationExtraction(copiedFiles[0]);
+      setState(() {
+          _messages.removeWhere((m) => m.isLoading); // 로딩 메시지 제거
+          _messages.add(ChatMessage(
+              text: '☑️  Extracted Information from Documents.')
+          );
+        }
+      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Future.delayed(Duration(milliseconds: 50), () {
+          _scrollToBottom();
+        });
+      });
+      await Future.delayed(Duration(seconds: 2));
 
-    setState(() {
-        _messages.removeWhere((m) => m.isLoading); // 로딩 메시지 제거
-        _messages.add(ChatMessage(
-            text: 'Extracted Information from Documents.')
-        );
-      }
-    );
+      setState(() {
+          _messages.add(ChatMessage(text: '...', isLoading: true, loadingMessage: "Parsing Uploaded paper..."));
+          _isLoading = true;
+        }
+      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Future.delayed(Duration(milliseconds: 50), () {
+          _scrollToBottom();
+        });
+      });
+
+      // 더미 응답 시뮬레이션
+      final result3 = await parseUploadedPaper(copiedFiles[0]);
+
+      setState(() {
+          _messages.removeWhere((m) => m.isLoading); // 로딩 메시지 제거
+          _messages.add(ChatMessage(text: '☑️  Analyzed Uploaded Paper.'));
+          _messages.add(ChatMessage(text: 'Show\nResult', isEnding: true));
+        }
+      );
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        Future.delayed(Duration(milliseconds: 50), () {
+          _scrollToBottom();
+        });
+      });
+    }
+    catch (e){
+      setState(() {
+          _messages.removeWhere((m) => m.isLoading); // 로딩 메시지 제거
+          _messages.add(ChatMessage(
+              text: 'Failed. Try again later')
+          );
+          _scrollToBottom();
+        }
+      );
+    }
+
   }
 
   Future<List<String>> fetchRecommendedPapers(String prompt) async {
@@ -203,27 +270,10 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
 
       var response = await request.send();
       var responseBody = await response.stream.bytesToString();
-      //print("서버 응답: $responseBody"); // 디버깅용 로그
 
       if (response.statusCode == 200) {
         var jsonResponse = json.decode(responseBody);
-        print("서버 응답: $jsonResponse"); // 디버깅용 로그
-
-        if (jsonResponse['result'] != null &&
-          jsonResponse['result']['result']['choices'] != null &&
-          jsonResponse['result']['result']['choices'].isNotEmpty) {
-          var contentStr =
-            jsonResponse['result']['result']['choices'][0]['message']['content'];
-          var content = json.decode(contentStr);
-
-          setState(() {
-              extractionResult = content;
-            });
-          print("✅ Universal Extraction 성공");
-        } else {
-          print(jsonResponse['result']['result']['choices']);
-          throw Exception("잘못된 응답 형식");
-        }
+        print("✅ Universal Extraction 성공");
       } else {
         print("❌ Universal Extraction 오류: $responseBody");
         ScaffoldMessenger.of(context).showSnackBar(
@@ -238,6 +288,55 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
     }
   }
 
+  Future<void> parseUploadedPaper(String originalFilename) async {
+    final uri = Uri.parse("http://localhost:5000/upload-pdf");
+    final request = http.MultipartRequest('POST', uri);
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        'file',
+        uploadedPdfFiles[originalFilename]!,
+        filename: originalFilename,
+        contentType: MediaType('application', 'pdf'),
+      ),
+    );
+
+    try {
+      final response = await request.send();
+      final responseBody = await response.stream.bytesToString();
+
+      if (response.statusCode == 200) {
+        final jsonRes = json.decode(responseBody);
+        final filename = jsonRes["html_file"] ?? "";
+
+        // ✅ 업로드 성공 후 perplexity 후처리 API 호출
+        final perplexityUri = Uri.parse("http://localhost:5000/run-perplexity");//$filenameWithoutExt");
+        final perplexityRes = await http.get(perplexityUri);
+
+        if (perplexityRes.statusCode == 200) {
+          print("✅ Perplexity 실행 성공");
+        } else {
+          throw Exception("❌ Perplexity 실행 실패: ${perplexityRes.body}");
+        }
+
+        // 목록에 추가
+        setState(() {
+            uploadedHtmlFiles.add({
+              "original": originalFilename,
+              "html": filename,
+            });
+            finalResult = jsonDecode(perplexityRes.body);
+            isAllEnd = true;
+          });
+
+        print("✅ HTML 변환 성공: $filename");
+      } else {
+        throw Exception("❌ 업로드 실패: $responseBody");
+      }
+    } catch (e) {
+      throw Exception("❌ 예외 발생: $e");
+    }
+  }
+
   Widget _buildMessage(ChatMessage message) {
     final isUser = message.isUser;
     final alignment = isUser ? Alignment.centerRight : Alignment.centerLeft;
@@ -246,93 +345,146 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
 
     return Align(
       alignment: alignment,
-      child: message.isLoading ?
+      child: message.isEnding ?
         Container(
-          margin: const EdgeInsets.symmetric(vertical: 4, horizontal: chatHorPadding),
-          child: Row(
-            spacing: 10,
-            children: [
-              SpinningImage(
-                imagePath: 'assets/icons/loading.png',
-              ),
-              Text(
-                message.loadingMessage,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: textGrayColor
+          margin: EdgeInsets.symmetric(vertical:10, horizontal: chatHorPadding),
+            child: Material(
+              elevation: 0,
+              color: Colors.transparent, // 배경색은 Container에서 설정
+              borderRadius: BorderRadius.circular(30),
+              child: InkWell(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => PdfAnnotationViewer(finalResult: finalResult!),
+                    ),
+                  ); // 원하는 페이지로 이동
+                },
+                borderRadius:
+                BorderRadius.circular(30), // 터치 영역도 둥글게
+                child: Container(
+                    width:100,
+                    height:100,
+                    decoration: BoxDecoration(
+                      color: primaryColorDark,
+                      borderRadius: BorderRadius.circular(30),
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          message.text,
+                          style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.white
+                          ),
+                        )
+                      ],
+                    )
                 ),
-              )
+              ),
+            )
+        )
+        : message.isLoading ?
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 4, horizontal: chatHorPadding),
+            child: Row(
+              spacing: 10,
+              children: [
+                SizedBox(width: 10,),
+                SpinningImage(
+                  imagePath: 'assets/icons/loading.png',
+                ),
+                Text(
+                  message.loadingMessage,
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: textGrayColor
+                  ),
+                )
+              ],
+            )
+          ) :
+          Column(
+            mainAxisAlignment: MainAxisAlignment.start,
+            crossAxisAlignment: crossAlignment,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+                margin: const EdgeInsets.symmetric(vertical: 4, horizontal: chatHorPadding),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border.all(color: Colors.grey.shade400),
+                  borderRadius: BorderRadius.circular(30),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.08),
+                      blurRadius: 8,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Text(
+                  message.text ?? '',
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: textColor
+                  ),
+                ),
+              ),
+              message.files.isNotEmpty ?
+                Container(
+                  margin: const EdgeInsets.symmetric(vertical: 4, horizontal: chatHorPadding),
+                  width: 800,
+                  height: isUser ? 80 : 250,
+                  child: ListView.builder(
+                    scrollDirection: isUser ? Axis.horizontal : Axis.vertical,
+                    reverse: isUser,
+                    shrinkWrap: !isUser,
+                    itemCount: message.files.length,
+                    itemBuilder: (context, index) {
+                      final item = message.files[index];
+                      return Container(
+                        //width: 100,
+                        padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+                        margin: const EdgeInsets.only(left: 15, bottom: 15),
+                        alignment: isUser ? Alignment.center : Alignment.centerLeft,
+                        decoration: BoxDecoration(
+                          color: primaryColor,
+                          border: Border.all(color: Colors.grey.shade400),
+                          borderRadius: BorderRadius.circular(30),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.08),
+                              blurRadius: 8,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Text(
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: Colors.white,
+                          ),
+                          item ?? "이름 없음"),
+                      );
+                    },
+                  ),
+                ) : Container()
             ],
           )
-        ) :
-        Column(
-          mainAxisAlignment: MainAxisAlignment.start,
-          crossAxisAlignment: crossAlignment,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-              margin: const EdgeInsets.symmetric(vertical: 4, horizontal: chatHorPadding),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                border: Border.all(color: Colors.grey.shade400),
-                borderRadius: BorderRadius.circular(30),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Text(
-                message.text ?? '',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: textColor
-                ),
-              ),
-            ),
-            message.files.isNotEmpty ?
-              Container(
-                margin: const EdgeInsets.symmetric(vertical: 4, horizontal: chatHorPadding),
-                width: 800,
-                height: isUser ? 80 : 300,
-                child: ListView.builder(
-                  scrollDirection: isUser ? Axis.horizontal : Axis.vertical,
-                  reverse: isUser,
-                  itemCount: message.files.length,
-                  itemBuilder: (context, index) {
-                    final item = message.files[index];
-                    return Container(
-                      //width: 100,
-                      padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
-                      margin: const EdgeInsets.only(left: 15, bottom: 15),
-                      alignment: isUser ? Alignment.center : Alignment.centerLeft,
-                      decoration: BoxDecoration(
-                        color: primaryColor,
-                        border: Border.all(color: Colors.grey.shade400),
-                        borderRadius: BorderRadius.circular(30),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.08),
-                            blurRadius: 8,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Text(
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Colors.white,
-                        ),
-                        item ?? "이름 없음"),
-                    );
-                  },
-                ),
-              ) : Container()
-          ],
-        )
     );
+  }
+
+  void _scrollToBottom() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
+    }
   }
 
   @override
@@ -357,6 +509,7 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
         _messages.isEmpty ? HelpPrompt() :
           Expanded(
             child: ListView.builder(
+              controller: _scrollController,
               padding: const EdgeInsets.symmetric(vertical: 12),
               itemCount: _messages.length,
               itemBuilder: (context, index) {
