@@ -7,12 +7,22 @@ import 'package:file_picker/file_picker.dart';
 import 'dart:convert';
 import 'package:http_parser/http_parser.dart';
 import 'dart:typed_data';
-
+const SERVER_ADDR = "localhost:5000";
 class ChatbotWidget extends StatefulWidget {
   const ChatbotWidget({super.key});
 
   @override
   State<ChatbotWidget> createState() => _ChatbotWidgetState();
+}
+class PaperInfo{
+  final String title;
+  final int year;
+  final String pub;
+  PaperInfo({
+    required this.title,
+    this.year=0,
+    this.pub="",
+  });
 }
 class ChatMessage {
   final String text;
@@ -20,7 +30,7 @@ class ChatMessage {
   final bool isLoading;
   final bool isEnding;
   final String loadingMessage;
-  final List<String> files;
+  final List<PaperInfo> files;
 
   ChatMessage({
     required this.text,
@@ -36,7 +46,7 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
   final List<ChatMessage> _messages = []; // {'role': 'user' | 'bot', 'text': '...'}
   bool _isLoading = false;
   static const double chatHorPadding = 150.0;
-  List<String> uploadedFiles = [];
+  List<PaperInfo> uploadedFiles = [];
   List<Map<String, String>> uploadedHtmlFiles = [];
   Map<String, dynamic>? extractionResult;
   Map<String, Uint8List?> uploadedPdfFiles = {};
@@ -61,7 +71,7 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
     for (var file in picked.files) {
       setState(() {
           uploadedPdfFiles[file.name] = file.bytes;
-          uploadedFiles.add(file.name);
+          uploadedFiles.add(PaperInfo(title: file.name));
         });
     }
   }
@@ -116,7 +126,7 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
         });
       });
       // 더미 응답 시뮬레이션
-      final result2 = await executeInformationExtraction(copiedFiles[0]);
+      final result2 = await executeInformationExtraction(copiedFiles[0].title);
 
       setState(() {
           _messages.removeWhere((m) => m.isLoading); // 로딩 메시지 제거
@@ -133,7 +143,7 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
       await Future.delayed(Duration(seconds: 2));
 
       setState(() {
-          _messages.add(ChatMessage(text: '...', isLoading: true, loadingMessage: "Parsing Uploaded paper..."));
+          _messages.add(ChatMessage(text: '...', isLoading: true, loadingMessage: "Analyzing Uploaded paper..."));
           _isLoading = true;
         }
       );
@@ -144,7 +154,7 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
       });
 
       // 더미 응답 시뮬레이션
-      final result3 = await parseUploadedPaper(copiedFiles[0]);
+      final result3 = await parseUploadedPaper(copiedFiles[0].title);
 
       setState(() {
           _messages.removeWhere((m) => m.isLoading); // 로딩 메시지 제거
@@ -171,8 +181,8 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
 
   }
 
-  Future<List<String>> fetchRecommendedPapers(String prompt) async {
-    final url = Uri.parse('http://localhost:5000/recommend');
+  Future<List<PaperInfo>> fetchRecommendedPapers(String prompt) async {
+    final url = Uri.parse('http://${SERVER_ADDR}/recommend');
 
     try {
       final response = await http.post(
@@ -184,7 +194,15 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
       if (response.statusCode == 200) {
         final responseJson = jsonDecode(response.body);
         final List<dynamic> fileNames = responseJson['files'];
-        return fileNames.cast<String>();
+        final List<PaperInfo> papers = fileNames.map((file) {
+          final Map<String, dynamic> f = file as Map<String, dynamic>;  // 명시적 캐스팅
+          return PaperInfo(
+            title: f['title'] as String,
+            year: double.parse(f['year'].toString()).toInt(),
+            pub: f['pub'] as String,
+          );
+        }).toList();
+        return papers;
       } else {
         print("에러 발생: ${response.statusCode} ${response.body}");
         return [];
@@ -193,6 +211,7 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
       print('요청 중 오류 발생: $e');
       return [];
     }
+    return [];
   }
 
   Future<void> executeInformationExtraction(String originalFilename) async {
@@ -254,7 +273,7 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
         }
       };
 
-      final uri = Uri.parse("http://localhost:5000/universal-extraction");
+      final uri = Uri.parse("http://${SERVER_ADDR}/universal-extraction");
       var request = http.MultipartRequest('POST', uri);
 
       request.files.add(
@@ -289,7 +308,7 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
   }
 
   Future<void> parseUploadedPaper(String originalFilename) async {
-    final uri = Uri.parse("http://localhost:5000/upload-pdf");
+    final uri = Uri.parse("http://${SERVER_ADDR}/upload-pdf");
     final request = http.MultipartRequest('POST', uri);
     request.files.add(
       http.MultipartFile.fromBytes(
@@ -309,7 +328,7 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
         final filename = jsonRes["html_file"] ?? "";
 
         // ✅ 업로드 성공 후 perplexity 후처리 API 호출
-        final perplexityUri = Uri.parse("http://localhost:5000/run-perplexity");//$filenameWithoutExt");
+        final perplexityUri = Uri.parse("http://${SERVER_ADDR}/run-perplexity");//$filenameWithoutExt");
         final perplexityRes = await http.get(perplexityUri);
 
         if (perplexityRes.statusCode == 200) {
@@ -467,7 +486,8 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
                             fontSize: 16,
                             color: Colors.white,
                           ),
-                          item ?? "이름 없음"),
+                          item.year==0?'${item.title}': '[${item.pub}, ${item.year}] ${item.title}'
+                        ),
                       );
                     },
                   ),
@@ -592,7 +612,7 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
                               //width: 100,
                               child: Row(
                                 children: [
-                                  Text(item ?? "이름 없음"),
+                                  Text(item.title ?? "이름 없음"),
                                 ],
                               )
                             );
