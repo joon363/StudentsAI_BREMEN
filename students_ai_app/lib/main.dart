@@ -5,9 +5,10 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:http_parser/http_parser.dart';
 import 'dart:html' as html;
+import 'screens/pdf_uploader.dart';
 
 void main() {
-  runApp(MaterialApp(home: PdfUploader()));
+  runApp(const MyApp());
 }
 
 class PdfUploader extends StatefulWidget {

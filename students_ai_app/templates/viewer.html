@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <title>Reconstructed PDF Viewer</title>
     <style>
         body {
@@ -31,12 +31,18 @@
           border: none;
           padding: 0;
           overflow: hidden;
-          white-space: pre-wrap;
+          white-space: nowrap;
           word-break: break-word;
+          color: black;
+          font-family: sans-serif;
+          background: transparent;
+          text-align: justify;
+          font-size: 11pt;
+          line-height: 1.2;
         }
         .table-img {
           position: absolute;
-          border: 1px solid #333;
+          border: none;
         }
         .pagination {
           margin-top: 20px;
@@ -75,12 +81,6 @@
         div.className = "text-block";
         div.innerHTML = el.content?.html || el.content?.text || "";
 
-        // 폰트 사이즈 추출
-        const fontSizeMatch = div.innerHTML.match(/font-size:\s?(\d+px)/);
-        if (fontSizeMatch) {
-          div.style.fontSize = fontSizeMatch[1];
-        }
-
         const coords = el.coordinates || [];
         if (coords.length >= 2) {
           const x = coords[0].x * pw;
@@ -92,14 +92,25 @@
           div.style.top = `${y}px`;
           div.style.width = `${w}px`;
           div.style.height = `${h}px`;
+
+          // 폰트 크기 고정 (11pt)
+          div.style.fontSize = `11pt`;
         }
+
         container.appendChild(div);
       });
 
       allTables.filter(tb => tb.page === pageNum).forEach(tb => {
         const img = document.createElement("img");
         img.className = "table-img";
-        img.src = tb.image_base64 || tb.base64 || "";
+
+        const rawBase64 = tb.base64 || tb.image_base64 || "";
+        const imageSrc = rawBase64.startsWith("data:image")
+          ? rawBase64
+          : `data:image/png;base64,${rawBase64}`;
+
+        img.src = imageSrc;
+
         const x = tb.x * pw;
         const y = tb.y * ph;
         const w = tb.w * pw;
