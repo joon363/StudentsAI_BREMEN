@@ -2,58 +2,35 @@ import 'package:flutter/material.dart';
 import 'package:students_ai_app/themes.dart';
 import 'package:students_ai_app/widgets/spinning_indicator.dart';
 import 'package:students_ai_app/pages/pdf_view_page.dart';
+import 'package:students_ai_app/models/messages.dart';
+import 'package:students_ai_app/connections/config.dart';
+import 'package:students_ai_app/connections/api_calls.dart';
 import 'package:http/http.dart' as http;
 import 'package:file_picker/file_picker.dart';
-import 'dart:convert';
 import 'package:http_parser/http_parser.dart';
+import 'dart:convert';
 import 'dart:typed_data';
-const SERVER_ADDR = "localhost:5000";
+
 class ChatbotWidget extends StatefulWidget {
   const ChatbotWidget({super.key});
 
   @override
   State<ChatbotWidget> createState() => _ChatbotWidgetState();
 }
-class PaperInfo{
-  final String title;
-  final int year;
-  final String pub;
-  PaperInfo({
-    required this.title,
-    this.year=0,
-    this.pub="",
-  });
-}
-class ChatMessage {
-  final String text;
-  final bool isUser;
-  final bool isLoading;
-  final bool isEnding;
-  final String loadingMessage;
-  final List<PaperInfo> files;
 
-  ChatMessage({
-    required this.text,
-    this.isUser = false,
-    this.isLoading = false,
-    this.isEnding = false,
-    this.loadingMessage = "",
-    this.files = const[],
-  });
-}
 class _ChatbotWidgetState extends State<ChatbotWidget> {
   final TextEditingController _controller = TextEditingController();
-  final List<ChatMessage> _messages = []; // {'role': 'user' | 'bot', 'text': '...'}
-  bool _isLoading = false;
-  static const double chatHorPadding = 150.0;
-  List<PaperInfo> uploadedFiles = [];
-  List<Map<String, String>> uploadedHtmlFiles = [];
-  Map<String, dynamic>? extractionResult;
-  Map<String, Uint8List?> uploadedPdfFiles = {};
   final ScrollController _scrollController = ScrollController();
+  final List<ChatMessage> _messages = [];
 
-  bool isAllEnd = false;
+  List<PaperInfo> uploadedFiles = [];
+  Map<String, Uint8List?> uploadedPdfFiles = {};
+  List<Map<String, String>> uploadedHtmlFiles = [];
+
+  Map<String, dynamic>? extractionResult;
   Map<String, dynamic>? finalResult;
+
+  static const double chatHorPadding = 150.0;
 
   Future<void> pickAndUploadFiles() async {
     final picked = await FilePicker.platform.pickFiles(
@@ -75,7 +52,8 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
         });
     }
   }
-  void _sendMessage() async {
+
+  Future<void> _selectFile() async{
     final userText = _controller.text.trim();
     final copiedFiles = uploadedFiles.map((file) => file).toList();
     if (userText.isEmpty) return;
@@ -85,7 +63,6 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
         _messages.add(ChatMessage(text: '...', isLoading: true, loadingMessage: "Searching for reference papers..."));
         _controller.clear();
         uploadedFiles.clear();
-        _isLoading = true;
       }
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -95,78 +72,85 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
     });
 
     // 더미 응답 시뮬레이션
+    final result = await APIManager.fetchRecommendedPapers(userText);
+    setState(() {
+        _messages.removeWhere((m) => m.isLoading); // 로딩 메시지 제거
+        _messages.add(ChatMessage(
+            text: '☑️  Selected ${result.length} Papers to compare with.',
+            files: result)
+        );
+      }
+      );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(Duration(milliseconds: 50), () {
+        _scrollToBottom();
+      });
+    });
+  } 
+
+  Future<void> _ieSelectedFile() async{
+    setState(() {
+        _messages.add(ChatMessage(text: '...', isLoading: true, loadingMessage: "Analyzing Selected papers..."));
+        _controller.clear();
+        uploadedFiles.clear();
+      }
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(Duration(milliseconds: 50), () {
+        _scrollToBottom();
+      });
+    });
+    
+    final result2 = await APIManager.executeInformationExtraction(copiedFiles[0].title);
+
+    setState(() {
+        _messages.removeWhere((m) => m.isLoading);
+        _messages.add(ChatMessage(
+            text: '☑️  Extracted Information from Documents.')
+        );
+      }
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(Duration(milliseconds: 50), () {
+        _scrollToBottom();
+      });
+    });
+  }
+
+  Future<void> _parseUploadedFile() async{
+    setState(() {
+        _messages.add(ChatMessage(text: '...', isLoading: true, loadingMessage: "Analyzing Uploaded paper..."));
+      }
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(Duration(milliseconds: 50), () {
+        _scrollToBottom();
+      });
+    });
+
+    final result3 = await APIManager.parseUploadedPaper(copiedFiles[0].title);
+
+    setState(() {
+        _messages.removeWhere((m) => m.isLoading);
+        _messages.add(ChatMessage(text: '☑️  Analyzed Uploaded Paper.'));
+        _messages.add(ChatMessage(text: 'Show\nResult', isEnding: true));
+      }
+    );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(Duration(milliseconds: 50), () {
+        _scrollToBottom();
+      });
+    });
+    
+  }
+  
+  void _sendMessage() async {
     try{
-      final result = await fetchRecommendedPapers(userText);
-
-      setState(() {
-          _messages.removeWhere((m) => m.isLoading); // 로딩 메시지 제거
-          _messages.add(ChatMessage(
-              text: '☑️  Selected ${result.length} Papers to compare with.',
-              files: result)
-          );
-        }
-      );
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        Future.delayed(Duration(milliseconds: 50), () {
-          _scrollToBottom();
-        });
-      });
+      await _selectFile();
       await Future.delayed(Duration(seconds: 2));
-
-      setState(() {
-          _messages.add(ChatMessage(text: '...', isLoading: true, loadingMessage: "Analyzing Selected papers..."));
-          _controller.clear();
-          uploadedFiles.clear();
-          _isLoading = true;
-        }
-      );
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        Future.delayed(Duration(milliseconds: 50), () {
-          _scrollToBottom();
-        });
-      });
-      // 더미 응답 시뮬레이션
-      final result2 = await executeInformationExtraction(copiedFiles[0].title);
-
-      setState(() {
-          _messages.removeWhere((m) => m.isLoading); // 로딩 메시지 제거
-          _messages.add(ChatMessage(
-              text: '☑️  Extracted Information from Documents.')
-          );
-        }
-      );
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        Future.delayed(Duration(milliseconds: 50), () {
-          _scrollToBottom();
-        });
-      });
+      await _ieSelectedFile();
       await Future.delayed(Duration(seconds: 2));
-
-      setState(() {
-          _messages.add(ChatMessage(text: '...', isLoading: true, loadingMessage: "Analyzing Uploaded paper..."));
-          _isLoading = true;
-        }
-      );
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        Future.delayed(Duration(milliseconds: 50), () {
-          _scrollToBottom();
-        });
-      });
-
-      // 더미 응답 시뮬레이션
-      final result3 = await parseUploadedPaper(copiedFiles[0].title);
-
-      setState(() {
-          _messages.removeWhere((m) => m.isLoading); // 로딩 메시지 제거
-          _messages.add(ChatMessage(text: '☑️  Analyzed Uploaded Paper.'));
-          _messages.add(ChatMessage(text: 'Show\nResult', isEnding: true));
-        }
-      );
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        Future.delayed(Duration(milliseconds: 50), () {
-          _scrollToBottom();
-        });
-      });
+      await _parseUploadedFile();
     }
     catch (e){
       setState(() {
@@ -178,185 +162,175 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
         }
       );
     }
-
   }
 
-  Future<List<PaperInfo>> fetchRecommendedPapers(String prompt) async {
-    final url = Uri.parse('http://${SERVER_ADDR}/recommend');
-
-    try {
-      final response = await http.post(
-        url,
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'prompt': prompt}),
+  void _scrollToBottom() {
+    if (_scrollController.hasClients) {
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: Duration(milliseconds: 300),
+        curve: Curves.easeOut,
       );
-
-      if (response.statusCode == 200) {
-        final responseJson = jsonDecode(response.body);
-        final List<dynamic> fileNames = responseJson['files'];
-        final List<PaperInfo> papers = fileNames.map((file) {
-          final Map<String, dynamic> f = file as Map<String, dynamic>;  // 명시적 캐스팅
-          return PaperInfo(
-            title: f['title'] as String,
-            year: double.parse(f['year'].toString()).toInt(),
-            pub: f['pub'] as String,
-          );
-        }).toList();
-        return papers;
-      } else {
-        throw Exception ("에러 발생: ${response.statusCode} ${response.body}");
-        return [];
-      }
-    } catch (e) {
-      throw Exception ('요청 중 오류 발생: $e');
-      return [];
     }
-    return [];
   }
 
-  Future<void> executeInformationExtraction(String originalFilename) async {
-    try {
-      final pdfBytes = uploadedPdfFiles[originalFilename];
-      if (pdfBytes == null) {
-        throw Exception("PDF 파일을 찾을 수 없습니다");
-      }
-
-      final schema = {
-        "name": "academic_paper_analysis_schema",
-        "schema": {
-          "type": "object",
-          "properties": {
-            "subsections": {
-              "type": "array",
-              "items": {"type": "string"},
-              "description":
-              "Main sentences from each section, providing specific details rather than summaries, and also check if all components of the paper have been covered"
-            },
-            "figures": {
-              "type": "array",
-              "items": {"type": "string"},
-              "description":
-              "The descriptions of the figures included in the paper"
-            },
-            "equations": {
-              "type": "array",
-              "items": {"type": "string"},
-              "description":
-              "The descriptions of the equations included in the paper"
-            },
-            "methods": {
-              "type": "array",
-              "items": {"type": "string"},
-              "description":
-              "The newly proposed methods or techniques in the paper"
-            },
-            "metrics": {
-              "type": "array",
-              "items": {"type": "string"},
-              "description":
-              "The comparison schemes and evaluation metrics used in the paper"
-            },
-            "words": {
-              "type": "array",
-              "items": {"type": "string"},
-              "description": "The non-academic expressions found in the paper"
-            }
-          },
-          "required": [
-            "subsections",
-            "figures",
-            "equations",
-            "methods",
-            "metrics",
-            "words"
-          ]
-        }
-      };
-
-      final uri = Uri.parse("http://${SERVER_ADDR}/universal-extraction");
-      var request = http.MultipartRequest('POST', uri);
-
-      request.files.add(
-        http.MultipartFile.fromBytes(
-          'file',
-          pdfBytes,
-          filename: originalFilename,
-          contentType: MediaType('application', 'pdf'),
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Row(
+          children: [
+            Image.asset(
+              'assets/icons/upstage-text-light.png',
+              height: 40,
+              fit: BoxFit.cover,
+            ),
+            Image.asset(
+              'assets/icons/upstage-logo-color.png',
+              height: 40,
+              fit: BoxFit.cover,
+            ),
+          ],
         ),
-      );
+        _messages.isEmpty ? HelpPrompt() :
+          Expanded(
+            child: ListView.builder(
+              controller: _scrollController,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              itemCount: _messages.length,
+              itemBuilder: (context, index) {
+                return buildMessage(_messages[index]);
+              },
+            ),
+          ),
 
-      request.fields['schema'] = json.encode(schema);
-
-      var response = await request.send();
-      var responseBody = await response.stream.bytesToString();
-
-      if (response.statusCode == 200) {
-        var jsonResponse = json.decode(responseBody);
-        print("✅ Universal Extraction 성공");
-      } else {
-        throw Exception ("❌ Universal Extraction 오류: $responseBody");
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("처리 중 오류가 발생했습니다")),
-        );
-      }
-    } catch (e) {
-      throw Exception ("❌ 오류 발생: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("오류가 발생했습니다: $e")),
-      );
-    }
-  }
-
-  Future<void> parseUploadedPaper(String originalFilename) async {
-    final uri = Uri.parse("http://${SERVER_ADDR}/upload-pdf");
-    final request = http.MultipartRequest('POST', uri);
-    request.files.add(
-      http.MultipartFile.fromBytes(
-        'file',
-        uploadedPdfFiles[originalFilename]!,
-        filename: originalFilename,
-        contentType: MediaType('application', 'pdf'),
-      ),
+        Padding(
+          padding: const EdgeInsets.only(left: chatHorPadding, right: chatHorPadding, bottom: 80, top: 10),
+          child: Container(
+            height: 180,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border.all(color: Colors.grey.shade400),
+              borderRadius: BorderRadius.circular(30),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: _controller,
+                  onSubmitted: (_) => _sendMessage(),
+                  decoration: const InputDecoration(
+                    hintText: '"What areas should I strengthen or expand in my paper?"',
+                    hintStyle: TextStyle(color: Colors.grey),
+                    border: InputBorder.none,         // 밑줄 제거!
+                    focusedBorder: InputBorder.none,  // 포커스됐을 때도 밑줄 제거
+                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  height: 50,
+                  //width: 500,
+                  child: Row(
+                    children: [
+                      // 파일 업로드 버튼
+                      Container(
+                        //width: 50,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: primaryColor,
+                          ),
+                          onPressed: pickAndUploadFiles,
+                          child: Container(
+                            height: 50,
+                            padding: EdgeInsets.symmetric(vertical: 15),
+                            child: Image.asset(
+                              'assets/icons/plus icon.png',
+                              fit: BoxFit.cover,
+                            ),
+                          )
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      SizedBox(
+                        width: 800,
+                        child: ListView.builder(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: uploadedFiles.length,
+                          itemBuilder: (context, index) {
+                            final item = uploadedFiles[index];
+                            return Container(
+                              margin: EdgeInsets.symmetric(horizontal: 10),
+                              padding: EdgeInsets.symmetric(horizontal: 15),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                border: Border.all(color: primaryColor, width: 2),
+                                borderRadius: BorderRadius.circular(30),
+                              ),
+                              //width: 100,
+                              child: Row(
+                                children: [
+                                  Text(item.title ?? "이름 없음"),
+                                ],
+                              )
+                            );
+                          },
+                        ),
+                      )
+                    ],
+                  ),
+                ),
+              ],
+            )
+          )
+        )
+      ],
     );
-
-    try {
-      final response = await request.send();
-      final responseBody = await response.stream.bytesToString();
-
-      if (response.statusCode == 200) {
-        final jsonRes = json.decode(responseBody);
-        final filename = jsonRes["html_file"] ?? "";
-
-        // ✅ 업로드 성공 후 perplexity 후처리 API 호출
-        final perplexityUri = Uri.parse("http://${SERVER_ADDR}/run-perplexity");//$filenameWithoutExt");
-        final perplexityRes = await http.get(perplexityUri);
-
-        if (perplexityRes.statusCode == 200) {
-          print("✅ Perplexity 실행 성공");
-        } else {
-          throw Exception("❌ Perplexity 실행 실패: ${perplexityRes.body}");
-        }
-
-        // 목록에 추가
-        setState(() {
-            uploadedHtmlFiles.add({
-              "original": originalFilename,
-              "html": filename,
-            });
-            finalResult = jsonDecode(perplexityRes.body);
-            isAllEnd = true;
-          });
-
-        print("✅ HTML 변환 성공: $filename");
-      } else {
-        throw Exception("❌ 업로드 실패: $responseBody");
-      }
-    } catch (e) {
-      throw Exception("❌ 예외 발생: $e");
-    }
   }
+}
 
-  Widget _buildMessage(ChatMessage message) {
+
+class HelpPrompt extends StatelessWidget {
+  const HelpPrompt({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 12.0),
+      child: Column(
+        children: [
+          Text(
+            'How can I help you?',
+            style: TextStyle(
+              fontSize: 50,
+              fontWeight: FontWeight.w500,
+              color: primaryColorDark,
+            ),
+          ),
+          Text(
+            'Upload your PDF (or other format)',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w500,
+              color: primaryColorDark,
+            ),
+          ),
+        ],
+      )
+    );
+  }
+}
+
+Widget buildMessage(ChatMessage message) {
     final isUser = message.isUser;
     final alignment = isUser ? Alignment.centerRight : Alignment.centerLeft;
     final crossAlignment = isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start;
@@ -496,167 +470,3 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
           )
     );
   }
-
-  void _scrollToBottom() {
-    if (_scrollController.hasClients) {
-      _scrollController.animateTo(
-        _scrollController.position.maxScrollExtent,
-        duration: Duration(milliseconds: 300),
-        curve: Curves.easeOut,
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Row(
-          children: [
-            Image.asset(
-              'assets/icons/upstage-text-light.png',
-              height: 40,
-              fit: BoxFit.cover,
-            ),
-            Image.asset(
-              'assets/icons/upstage-logo-color.png',
-              height: 40,
-              fit: BoxFit.cover,
-            ),
-          ],
-        ),
-        _messages.isEmpty ? HelpPrompt() :
-          Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              itemCount: _messages.length,
-              itemBuilder: (context, index) {
-                return _buildMessage(_messages[index]);
-              },
-            ),
-          ),
-
-        Padding(
-          padding: const EdgeInsets.only(left: chatHorPadding, right: chatHorPadding, bottom: 80, top: 10),
-          child: Container(
-            height: 180,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              border: Border.all(color: Colors.grey.shade400),
-              borderRadius: BorderRadius.circular(30),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.08),
-                  blurRadius: 8,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                TextField(
-                  controller: _controller,
-                  onSubmitted: (_) => _sendMessage(),
-                  decoration: const InputDecoration(
-                    hintText: '"What areas should I strengthen or expand in my paper?"',
-                    hintStyle: TextStyle(color: Colors.grey),
-                    border: InputBorder.none,         // 밑줄 제거!
-                    focusedBorder: InputBorder.none,  // 포커스됐을 때도 밑줄 제거
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  height: 50,
-                  //width: 500,
-                  child: Row(
-                    children: [
-                      // 파일 업로드 버튼
-                      Container(
-                        //width: 50,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: primaryColor,
-                          ),
-                          onPressed: pickAndUploadFiles,
-                          child: Container(
-                            height: 50,
-                            padding: EdgeInsets.symmetric(vertical: 15),
-                            child: Image.asset(
-                              'assets/icons/plus icon.png',
-                              fit: BoxFit.cover,
-                            ),
-                          )
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      SizedBox(
-                        width: 800,
-                        child: ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: uploadedFiles.length,
-                          itemBuilder: (context, index) {
-                            final item = uploadedFiles[index];
-                            return Container(
-                              margin: EdgeInsets.symmetric(horizontal: 10),
-                              padding: EdgeInsets.symmetric(horizontal: 15),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                border: Border.all(color: primaryColor, width: 2),
-                                borderRadius: BorderRadius.circular(30),
-                              ),
-                              //width: 100,
-                              child: Row(
-                                children: [
-                                  Text(item.title ?? "이름 없음"),
-                                ],
-                              )
-                            );
-                          },
-                        ),
-                      )
-                    ],
-                  ),
-                ),
-              ],
-            )
-          )
-        )
-      ],
-    );
-  }
-}
-class HelpPrompt extends StatelessWidget {
-  const HelpPrompt({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 16.0, horizontal: 12.0),
-      child: Column(
-        children: [
-          Text(
-            'How can I help you?',
-            style: TextStyle(
-              fontSize: 50,
-              fontWeight: FontWeight.w500,
-              color: primaryColorDark,
-            ),
-          ),
-          Text(
-            'Upload your PDF (or other format)',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.w500,
-              color: primaryColorDark,
-            ),
-          ),
-        ],
-      )
-    );
-  }
-}

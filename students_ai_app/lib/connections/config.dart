@@ -1,0 +1,1 @@
+const SERVER_ADDR = "localhost:5000";
