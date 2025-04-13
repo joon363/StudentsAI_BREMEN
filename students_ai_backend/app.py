@@ -85,7 +85,13 @@ def recommend():
         if os.path.exists(src):
             dst = os.path.join(REF_DIR, os.path.basename(src))
             shutil.copyfile(src, dst)
-            result_filenames.append(paper['title'])
+            result_filenames.append(
+                {
+                    "title":paper['title'],
+                    "year":str(paper['date']),
+                    "pub":paper['publications']
+                }
+            )
 
     return jsonify({"files": result_filenames}), 200
 

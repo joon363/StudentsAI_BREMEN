@@ -45,12 +45,7 @@ def extract_conditions(prompt):
     for chunk in stream:
         if chunk.choices[0].delta.content is not None:
             full_response += chunk.choices[0].delta.content
-
     return(full_response)
-
-# 2. 프롬프트 벡터화
-#model = SentenceTransformer('sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2')
-def get_vector(text): return model.encode([text], convert_to_numpy=True)[0]
 
 # 3. 논문 후보 필터링 + 유사도 계산
 def find_top_papers(prompt):
@@ -62,7 +57,7 @@ def find_top_papers(prompt):
         query += f" AND publications = '{parsed['journal_name']}'"
     if "min_citation" in parsed:
         query += f" AND citations >= {parsed['min_citation']}"
-
+    print(query)
     df = pd.read_sql(query, conn)
     #vectors = model.encode(df['index_term'].tolist(), convert_to_numpy=True)
     #prompt_vec = get_vector(prompt)
