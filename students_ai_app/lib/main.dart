@@ -12,7 +12,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Upstage Paper Assistant',
+      title: 'upDocs',
       theme: AppTheme.lightTheme(context),
       home: ChatbotPage(),
     );

@@ -10,7 +10,6 @@ class SidebarWidget extends StatefulWidget {
 
 class _SidebarWidgetState extends State<SidebarWidget> {
   String selectedField = 'Electric Engineering';
-
   String selectedInstitute = 'IEEE';
 
   final List<String> fields = [
