@@ -204,11 +204,11 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
         }).toList();
         return papers;
       } else {
-        print("에러 발생: ${response.statusCode} ${response.body}");
+        throw Exception ("에러 발생: ${response.statusCode} ${response.body}");
         return [];
       }
     } catch (e) {
-      print('요청 중 오류 발생: $e');
+      throw Exception ('요청 중 오류 발생: $e');
       return [];
     }
     return [];
@@ -294,13 +294,13 @@ class _ChatbotWidgetState extends State<ChatbotWidget> {
         var jsonResponse = json.decode(responseBody);
         print("✅ Universal Extraction 성공");
       } else {
-        print("❌ Universal Extraction 오류: $responseBody");
+        throw Exception ("❌ Universal Extraction 오류: $responseBody");
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text("처리 중 오류가 발생했습니다")),
         );
       }
     } catch (e) {
-      print("❌ 오류 발생: $e");
+      throw Exception ("❌ 오류 발생: $e");
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("오류가 발생했습니다: $e")),
       );

@@ -24,7 +24,6 @@ class _PdfAnnotationViewerState extends State<PdfAnnotationViewer>
     final anno = <Annotation>[];
     widget.finalResult?.forEach((content, data) {
       anno.add(Annotation.fromJson(content, data));
-      print(data.toString());
     });
     anno.sort((a, b) => a.page.compareTo(b.page));
     return anno;

@@ -20,7 +20,6 @@ for i, row in df.iterrows():
     # paper_id를 기반으로 파일 경로 설정 (예: '1.pdf', '2.pdf' 형태)
     file_path = f"{row['paper_id']}.pdf"
 
-    print(row)
     # 각 행의 데이터를 MySQL 테이블에 삽입
     insert_query = """INSERT INTO papers (paper_id, title, publications, date, h5, citations, keyword, index_term, file_path) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)"""
     cursor.execute(insert_query, (

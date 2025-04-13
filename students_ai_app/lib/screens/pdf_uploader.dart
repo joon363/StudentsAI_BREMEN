@@ -60,7 +60,7 @@ class _PdfUploaderState extends State<PdfUploader> {
           if (perplexityRes.statusCode == 200) {
             print("✅ Perplexity 실행 성공");
           } else {
-            print("❌ Perplexity 실행 실패: ${perplexityRes.body}");
+            throw Exception ("❌ Perplexity 실행 실패: ${perplexityRes.body}");
           }
 
           // 목록에 추가
@@ -73,10 +73,10 @@ class _PdfUploaderState extends State<PdfUploader> {
 
           print("✅ HTML 변환 성공: $filename");
         } else {
-          print("❌ 업로드 실패: $responseBody");
+          throw Exception ("❌ 업로드 실패: $responseBody");
         }
       } catch (e) {
-        print("❌ 예외 발생: $e");
+        throw Exception ("❌ 예외 발생: $e");
       }
     }
   }

@@ -3,7 +3,6 @@ import requests
 import os
 import json
 from dotenv import load_dotenv
-from flask import Flask, jsonify
 
 # .env 파일에서 API 키 불러오기
 load_dotenv()
@@ -19,7 +18,7 @@ SUMMARY_COORD_PATH = os.path.join(DATA_DIR, "summary_to_coords.json")  # 결과 
 
 # API 요청 헤더
 headers = {
-    "Authorization": f"Bearer {API_KEY}",
+    "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
     "Content-Type": "application/json"
 }
 
@@ -38,18 +37,19 @@ def run_perplexity():
     다음은 원문 문장과 해당 문장의 ID입니다:
     {text_to_id}
 
-    아래는 요약된 문장들의 리스트입니다.
-    이 요약된 문장들이 위 원문 중 어떤 문장을 요약한 것인지 유추해서, 해당 원문의 ID를 찾아주세요.
+    아래는 요약된 문장과 그 요약된 문장에서 비롯된 코멘트들의 리스트입니다.
+    이 코멘트나 요약된 문장이 위 원문 중 어떤 문장을 요약한 것인지 유추해서, 해당 원문의 ID를 찾아주세요.
 
     출력은 다음과 같은 JSON 형식으로 해주세요:
+    **영어로 대답해 주세요.**
 
     {{
-      "요약된 문장 1": ID,
-      "요약된 문장 2": ID,
+      "코멘트 1": ID,
+      "코멘트 2": ID,
       ...
     }}
 
-    요약 문장들:
+    코멘트들:
     {summary_list}
     """
 
@@ -60,8 +60,7 @@ def run_perplexity():
         "temperature": 0.3
     }
 
-    response = requests.post(API_URL, headers=headers, json=payload)
-    print("🔁 Status Code:", response.status_code)
+    response = requests.post(PERP_API_URL, headers=headers, json=payload)
 
     try:
         # 응답에서 JSON 형태 결과 텍스트만 추출
@@ -101,11 +100,3 @@ def run_perplexity():
         print("❌ JSON 파싱 실패:", e)
         print("⚠️ 응답 내용:\n", response.text)
         return False, {"error": str(e)}
-
-# Flask 앱으로 이 기능을 외부에서 호출할 수 있도록 라우트 등록
-app = Flask(__name__)
-
-@app.route("/run-perplexity", methods=["GET"])
-def run():
-    success, result = run_perplexity()
-    return jsonify(result), 200 if success else 500
